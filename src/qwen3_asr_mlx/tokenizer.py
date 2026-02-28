@@ -46,25 +46,44 @@ _PROMPT_SUFFIX: list[int] = [
     198,                 # "\n"
 ]
 
+# Token ID for "language" (single BPE token in Qwen3-ASR vocabulary)
+_LANGUAGE_TOKEN_ID: int = 11528
+
 
 # ---------------------------------------------------------------------------
 # Public helpers (usable without a Tokenizer instance)
 # ---------------------------------------------------------------------------
 
-def build_prompt(n_audio_tokens: int) -> list[int]:
+def build_prompt(
+    n_audio_tokens: int,
+    language_name_tokens: list[int] | None = None,
+) -> list[int]:
     """Return the full input_ids for a Qwen3-ASR inference prompt.
 
-    Structure:
+    The Qwen3-ASR chat template requires the assistant turn to begin with
+    ``language {name}<asr_text>`` before the model generates transcription
+    tokens.  If *language_name_tokens* is ``None``, the caller must provide
+    pre-encoded tokens for the language name via ``Tokenizer.encode()``.
+
+    Structure::
+
         <|im_start|>system\\n<|im_end|>\\n
         <|im_start|>user\\n
         <|audio_start|><|audio_pad|>×N<|audio_end|>
         <|im_end|>\\n
         <|im_start|>assistant\\n
+        language {name}<asr_text>
     """
+    if language_name_tokens is None:
+        language_name_tokens = []
+
     return (
         _PROMPT_PREFIX
         + [AUDIO_PAD_TOKEN_ID] * n_audio_tokens
         + _PROMPT_SUFFIX
+        + [_LANGUAGE_TOKEN_ID]
+        + language_name_tokens
+        + [ASR_TEXT_TOKEN_ID]
     )
 
 
@@ -146,9 +165,10 @@ class Tokenizer:
     # Convenience wrappers that delegate to the module-level functions so that
     # callers do not need to import them separately.
 
-    def build_prompt(self, n_audio_tokens: int) -> list[int]:
-        """Return the full prompt input_ids (delegates to module-level helper)."""
-        return build_prompt(n_audio_tokens)
+    def build_prompt(self, n_audio_tokens: int, language: str = "English") -> list[int]:
+        """Return the full prompt input_ids with language baked in."""
+        lang_tokens = self.encode(f" {language}")
+        return build_prompt(n_audio_tokens, lang_tokens)
 
     def parse_output(self, text: str) -> str:
         """Extract transcription from model output (delegates to module-level helper)."""

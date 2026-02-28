@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import gc
-import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +19,7 @@ from .config import ModelConfig
 from .decoder import TextDecoder, load_decoder_weights
 from .encoder import AudioEncoder, load_encoder_weights
 from .generate import generate
-from .tokenizer import Tokenizer, build_prompt, parse_output
+from .tokenizer import Tokenizer
 
 
 # ---------------------------------------------------------------------------
@@ -326,18 +325,21 @@ class Qwen3ASR:
                 chunk_duration,
             )
 
-        # 4. Mel spectrogram
+        # 4. Resolve language name for the prompt
+        lang_name = self._resolve_language(language)
+
+        # 5. Mel spectrogram
         mel = log_mel_spectrogram(samples)
 
-        # 5. Encode
+        # 6. Encode
         encoder_output = self._encoder(mel)
         mx.eval(encoder_output)
 
-        # 6. Build prompt
+        # 7. Build prompt (includes "language {name}<asr_text>" in assistant turn)
         n_audio_tokens = encoder_output.shape[1]
-        input_ids = build_prompt(n_audio_tokens)
+        input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name)
 
-        # 7. Generate
+        # 8. Generate (model outputs only the transcription text)
         output_tokens = generate(
             self._decoder,
             encoder_output,
@@ -350,49 +352,33 @@ class Qwen3ASR:
             repetition_context_size=repetition_context_size,
         )
 
-        # 8. Decode and parse (token-level splitting on <asr_text>)
-        text, detected_lang = self._parse_tokens(output_tokens)
+        # 9. Decode
+        text = self._decode_output(output_tokens)
 
-        # If caller provided a language hint, prefer it when the model
-        # returns "Unknown".
-        if language is not None and detected_lang == "Unknown":
-            detected_lang = LANGUAGE_MAP.get(language.lower(), language)
+        return TranscriptionResult(text=text, language=lang_name, duration=duration)
 
-        return TranscriptionResult(text=text, language=detected_lang, duration=duration)
+    def _resolve_language(self, language: Optional[str]) -> str:
+        """Map user-provided language hint to a full language name.
 
-    def _parse_tokens(self, tokens: list[int]) -> tuple[str, str]:
-        """Parse generated tokens into (text, language) at the token level.
-
-        The model output format is:
-            ``[language_token, lang_name_tokens..., <asr_text>, transcription_tokens..., <|im_end|>]``
-
-        Splitting on the ``<asr_text>`` token ID avoids BPE decode artifacts
-        that appear when decoding across the boundary.
+        Returns ``"English"`` when no hint is given (the model's default).
         """
-        from .tokenizer import ASR_TEXT_TOKEN_ID, EOS_TOKEN_IDS
+        if language is None or language.lower() in ("auto", ""):
+            return "English"
+        return LANGUAGE_MAP.get(language.lower(), language)
+
+    def _decode_output(self, tokens: list[int]) -> str:
+        """Decode generated tokens into transcription text.
+
+        Since ``language {name}<asr_text>`` is now part of the prompt, the
+        model output contains only the transcription followed by EOS.
+        """
+        from .tokenizer import EOS_TOKEN_IDS
 
         # Strip trailing EOS tokens
         while tokens and tokens[-1] in EOS_TOKEN_IDS:
             tokens = tokens[:-1]
 
-        # Find <asr_text> boundary
-        if ASR_TEXT_TOKEN_ID in tokens:
-            idx = tokens.index(ASR_TEXT_TOKEN_ID)
-            preamble_tokens = tokens[:idx]
-            text_tokens = tokens[idx + 1:]
-        else:
-            preamble_tokens = []
-            text_tokens = tokens
-
-        # Decode transcription text
-        text = self._tokenizer.decode(text_tokens, skip_special_tokens=True).strip()
-
-        # Extract language from preamble
-        preamble = self._tokenizer.decode(preamble_tokens, skip_special_tokens=True).strip()
-        match = re.match(r"language\s+(.+)", preamble, re.IGNORECASE)
-        language = match.group(1).strip() if match else "Unknown"
-
-        return text, language
+        return self._tokenizer.decode(tokens, skip_special_tokens=True).strip()
 
     def _transcribe_chunked(
         self,
@@ -417,8 +403,8 @@ class Qwen3ASR:
 
         split_points = _find_split_points(samples, chunk_samples, search_samples)
 
+        lang_name = self._resolve_language(language)
         texts: list[str] = []
-        detected_lang = "Unknown"
 
         prev = 0
         for sp in split_points + [len(samples)]:
@@ -435,7 +421,7 @@ class Qwen3ASR:
             mx.eval(encoder_output)
 
             n_audio_tokens = encoder_output.shape[1]
-            input_ids = build_prompt(n_audio_tokens)
+            input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name)
 
             output_tokens = generate(
                 self._decoder,
@@ -449,21 +435,15 @@ class Qwen3ASR:
                 repetition_context_size=repetition_context_size,
             )
 
-            chunk_text, chunk_lang = self._parse_tokens(output_tokens)
+            chunk_text = self._decode_output(output_tokens)
             if chunk_text:
                 texts.append(chunk_text)
 
-            if detected_lang == "Unknown":
-                detected_lang = chunk_lang
-
             prev = sp
-
-        if language is not None and detected_lang == "Unknown":
-            detected_lang = LANGUAGE_MAP.get(language.lower(), language)
 
         return TranscriptionResult(
             text=" ".join(texts),
-            language=detected_lang,
+            language=lang_name,
             duration=duration,
         )
 
