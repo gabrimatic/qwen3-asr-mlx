@@ -6,6 +6,7 @@
 import pytest
 
 from qwen3_asr_mlx.tokenizer import (
+    ASR_TEXT_TOKEN_ID,
     AUDIO_END_TOKEN_ID,
     AUDIO_PAD_TOKEN_ID,
     AUDIO_START_TOKEN_ID,
@@ -21,8 +22,9 @@ from qwen3_asr_mlx.tokenizer import (
 
 class TestBuildPrompt:
     def test_zero_audio_tokens(self):
+        # With no language tokens, prompt ends with suffix + language_token + asr_text_token
         ids = build_prompt(0)
-        assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX
+        assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX + [11528, ASR_TEXT_TOKEN_ID]
 
     def test_audio_tokens_present(self):
         n = 10
@@ -35,10 +37,13 @@ class TestBuildPrompt:
         assert ids[: len(_PROMPT_PREFIX)] == _PROMPT_PREFIX
 
     def test_suffix_tokens(self):
+        # _PROMPT_SUFFIX appears immediately after the audio tokens; the prompt
+        # continues with language prefix tokens before <asr_text>.
         n = 5
         ids = build_prompt(n)
-        suffix = ids[len(_PROMPT_PREFIX) + n :]
-        assert suffix == _PROMPT_SUFFIX
+        suffix_start = len(_PROMPT_PREFIX) + n
+        suffix_section = ids[suffix_start : suffix_start + len(_PROMPT_SUFFIX)]
+        assert suffix_section == _PROMPT_SUFFIX
 
     def test_exact_prefix_values(self):
         """Verify the exact hardcoded prefix matches the Qwen3-ASR spec."""
@@ -68,9 +73,14 @@ class TestBuildPrompt:
         assert _PROMPT_SUFFIX == expected_suffix
 
     def test_total_length(self):
+        # build_prompt with no language_name_tokens appends: language_token + asr_text_token (2 tokens)
         n = 7
         ids = build_prompt(n)
-        assert len(ids) == len(_PROMPT_PREFIX) + n + len(_PROMPT_SUFFIX)
+        assert len(ids) == len(_PROMPT_PREFIX) + n + len(_PROMPT_SUFFIX) + 2
+
+    def test_ends_with_asr_text_token(self):
+        ids = build_prompt(5)
+        assert ids[-1] == ASR_TEXT_TOKEN_ID
 
     def test_large_audio_token_count(self):
         n = 1500

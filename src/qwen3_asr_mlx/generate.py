@@ -13,7 +13,6 @@ import mlx.nn as nn
 from .decoder import KVCache, TextDecoder
 from .tokenizer import AUDIO_PAD_TOKEN_ID, EOS_TOKEN_IDS
 
-
 # ---------------------------------------------------------------------------
 # Embedding preparation
 # ---------------------------------------------------------------------------
@@ -269,8 +268,7 @@ def generate(
     # 2. Prefill: process the full prompt in one forward pass
     cache = KVCache()
     seq_len = embeddings.shape[1]
-    position_ids = mx.arange(seq_len, dtype=mx.int32)[None]  # (1, seq_len)
-    logits = decoder(embeddings, position_ids, cache=cache, is_embeds=True)
+    logits = decoder(embeddings, cache=cache, is_embeds=True)
     mx.eval(logits)
 
     # Update cache offset after prefill
@@ -294,8 +292,7 @@ def generate(
 
         # Embed the new token: (1, 1, hidden_size)
         token_embed = decoder.embed_tokens(mx.array([[next_token]]))
-        pos = mx.array([[cache.offset]], dtype=mx.int32)
-        logits = decoder(token_embed, pos, cache=cache, is_embeds=True)
+        logits = decoder(token_embed, cache=cache, is_embeds=True)
         mx.eval(logits)
 
         cache.offset += 1

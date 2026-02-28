@@ -19,9 +19,6 @@ from qwen3_asr_mlx.decoder import (
     KVCache,
     MLP,
     TextDecoder,
-    _apply_rotary_pos_emb,
-    _build_rope,
-    _rotate_half,
     load_decoder_weights,
 )
 
@@ -93,59 +90,63 @@ class TestRMSNorm:
 
 
 # ---------------------------------------------------------------------------
-# RoPE
+# RoPE (via nn.RoPE)
 # ---------------------------------------------------------------------------
 
 class TestRoPE:
-    def test_cos_sin_shapes(self):
-        B, T, head_dim = 1, 8, 16
-        position_ids = mx.arange(T, dtype=mx.int32)[None]  # (1, T)
-        cos, sin = _build_rope(position_ids, head_dim, theta=1e6)
-        mx.eval(cos, sin)
-        assert cos.shape == (B, 1, T, head_dim), f"cos shape: {cos.shape}"
-        assert sin.shape == (B, 1, T, head_dim), f"sin shape: {sin.shape}"
-
-    def test_rotate_half_shape(self):
-        x = mx.ones((1, 4, 8, 16))
-        out = _rotate_half(x)
-        mx.eval(out)
-        assert out.shape == x.shape
-
-    def test_rotate_half_formula(self):
-        """rotate_half([a, b]) should equal [-b, a]."""
-        x_np = np.arange(8, dtype=np.float32).reshape(1, 8)
-        x = mx.array(x_np)
-        out = _rotate_half(x)
-        mx.eval(out)
-        half = 4
-        expected = np.concatenate([-x_np[:, half:], x_np[:, :half]], axis=-1)
-        assert np.allclose(np.array(out), expected, atol=1e-6)
+    def test_rope_preserves_shape(self):
+        """RoPE rotation should not change the tensor shape."""
+        head_dim = 16
+        B, H, T = 1, 4, 6
+        rope = nn.RoPE(head_dim, traditional=False, base=1_000_000.0)
+        q = mx.array(np.random.randn(B, H, T, head_dim).astype(np.float32))
+        q_rot = rope(q)
+        mx.eval(q_rot)
+        assert q_rot.shape == q.shape
 
     def test_rope_preserves_norm(self):
         """RoPE rotation should preserve the L2 norm of query/key vectors."""
         head_dim = 16
         B, H, T = 1, 4, 6
-        position_ids = mx.arange(T, dtype=mx.int32)[None]
-        cos, sin = _build_rope(position_ids, head_dim)
+        rope = nn.RoPE(head_dim, traditional=False, base=1_000_000.0)
         q = mx.array(np.random.randn(B, H, T, head_dim).astype(np.float32))
         k = mx.array(np.random.randn(B, H, T, head_dim).astype(np.float32))
-        q_rot, k_rot = _apply_rotary_pos_emb(q, k, cos, sin)
+        q_rot = rope(q)
+        k_rot = rope(k)
         mx.eval(q_rot, k_rot)
 
-        q_norm     = np.linalg.norm(np.array(q),     axis=-1)
+        q_norm = np.linalg.norm(np.array(q), axis=-1)
         q_rot_norm = np.linalg.norm(np.array(q_rot), axis=-1)
         assert np.allclose(q_norm, q_rot_norm, atol=1e-4), "RoPE changed query norms"
 
-    def test_cos_sin_values(self):
-        """Verify cos/sin at position 0 with a known frequency."""
-        position_ids = mx.zeros((1, 1), dtype=mx.int32)
-        cos, sin = _build_rope(position_ids, head_dim=4, theta=1e6)
-        mx.eval(cos, sin)
-        # At position 0: cos=1, sin=0 for all frequencies
-        cos_np = np.array(cos).reshape(-1)
-        sin_np = np.array(sin).reshape(-1)
-        assert np.allclose(cos_np, 1.0, atol=1e-5), f"cos at pos 0: {cos_np}"
-        assert np.allclose(sin_np, 0.0, atol=1e-5), f"sin at pos 0: {sin_np}"
+    def test_rope_at_zero_offset_is_deterministic(self):
+        """RoPE at the same offset should produce the same result."""
+        head_dim = 16
+        rope = nn.RoPE(head_dim, traditional=False, base=1_000_000.0)
+        q = mx.array(np.ones((1, 2, 4, head_dim), dtype=np.float32))
+        out1 = rope(q, offset=0)
+        out2 = rope(q, offset=0)
+        mx.eval(out1, out2)
+        assert np.allclose(np.array(out1), np.array(out2), atol=1e-6)
+
+    def test_rope_offset_shifts_positions(self):
+        """Applying RoPE at offset=0 to [t0, t1] should equal applying at offset=1 to [t1] only."""
+        head_dim = 16
+        rope = nn.RoPE(head_dim, traditional=False, base=1_000_000.0)
+        q = mx.array(np.random.randn(1, 1, 2, head_dim).astype(np.float32))
+        out_full = rope(q, offset=0)
+        mx.eval(out_full)
+
+        # The second token at offset=0 should match a single token at offset=1
+        q_single = q[:, :, 1:, :]
+        out_single = rope(q_single, offset=1)
+        mx.eval(out_single)
+
+        assert np.allclose(
+            np.array(out_full[:, :, 1:, :]),
+            np.array(out_single),
+            atol=1e-5,
+        ), "RoPE at offset=1 should match second position of full sequence"
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +184,7 @@ class TestGQA:
         attn = Attention(config)
         B, T = 1, 5
         x = mx.array(np.random.randn(B, T, config.hidden_size).astype(np.float32))
-        pos = mx.arange(T, dtype=mx.int32)[None]
-        out = attn(x, pos, cache=None, layer_idx=0)
+        out = attn(x, cache=None, layer_idx=0)
         mx.eval(out)
         assert out.shape == (B, T, config.hidden_size), f"Attn output shape: {out.shape}"
 
@@ -196,8 +196,7 @@ class TestGQA:
         attn = Attention(config)
         B, T = 1, 3
         x = mx.array(np.random.randn(B, T, config.hidden_size).astype(np.float32))
-        pos = mx.arange(T, dtype=mx.int32)[None]
-        out = attn(x, pos, cache=None, layer_idx=0)
+        out = attn(x, cache=None, layer_idx=0)
         mx.eval(out)
         assert out.shape == (B, T, config.hidden_size)
 
@@ -212,8 +211,7 @@ class TestDecoderForwardShape:
         config = _tiny_config()
         decoder = TextDecoder(config)
         input_ids = mx.array([[1, 2, 3, 4, 5]])  # (1, 5)
-        pos = mx.arange(5, dtype=mx.int32)[None]
-        logits = decoder(input_ids, pos)
+        logits = decoder(input_ids)
         mx.eval(logits)
         assert logits.shape == (1, 5, config.vocab_size), f"Shape: {logits.shape}"
 
@@ -223,8 +221,7 @@ class TestDecoderForwardShape:
         decoder = TextDecoder(config)
         B, T, H = 1, 6, config.hidden_size
         embeds = mx.array(np.random.randn(B, T, H).astype(np.float32))
-        pos = mx.arange(T, dtype=mx.int32)[None]
-        logits = decoder(embeds, pos, is_embeds=True)
+        logits = decoder(embeds, is_embeds=True)
         mx.eval(logits)
         assert logits.shape == (B, T, config.vocab_size)
 
@@ -234,14 +231,13 @@ class TestDecoderForwardShape:
         decoder = TextDecoder(config)
         # Compute logits via forward
         input_ids = mx.array([[0]])
-        pos = mx.zeros((1, 1), dtype=mx.int32)
-        logits = decoder(input_ids, pos)
+        logits = decoder(input_ids)
         mx.eval(logits)
 
         # Manually compute tied projection
         h = decoder.embed_tokens(input_ids)
         for i, layer in enumerate(decoder.layers):
-            h = layer(h, pos, None, layer_idx=i)
+            h = layer(h, None, layer_idx=i)
         h = decoder.norm(h)
         manual_logits = h @ decoder.embed_tokens.weight.T
         mx.eval(manual_logits)
@@ -293,24 +289,21 @@ class TestKVCache:
 
         T = 4
         input_ids = mx.array([[1, 2, 3, 4]])  # (1, T)
-        pos_full  = mx.arange(T, dtype=mx.int32)[None]
 
         # Full context pass (no cache)
-        logits_full = decoder(input_ids, pos_full, cache=None)
+        logits_full = decoder(input_ids, cache=None)
         mx.eval(logits_full)
         last_logits = np.array(logits_full[:, -1, :])
 
         # Cached pass: prefill T-1 tokens, then decode the last one
         cache = KVCache()
         prefill_ids = input_ids[:, :-1]  # (1, T-1)
-        pos_prefill = mx.arange(T - 1, dtype=mx.int32)[None]
-        decoder(prefill_ids, pos_prefill, cache=cache)
+        decoder(prefill_ids, cache=cache)
         cache.offset = T - 1
         mx.eval(cache.keys[0], cache.values[0])
 
         last_id = input_ids[:, -1:]  # (1, 1)
-        pos_decode = mx.array([[T - 1]], dtype=mx.int32)
-        logits_cached = decoder(last_id, pos_decode, cache=cache)
+        logits_cached = decoder(last_id, cache=cache)
         mx.eval(logits_cached)
         cached_logits = np.array(logits_cached[:, 0, :])
 
@@ -335,8 +328,7 @@ class TestWeightLoading:
         load_decoder_weights(decoder, MODEL_PATH)
 
         input_ids = mx.array([[1, 2, 3]])
-        pos = mx.arange(3, dtype=mx.int32)[None]
-        logits = decoder(input_ids, pos)
+        logits = decoder(input_ids)
         mx.eval(logits)
 
         assert logits.shape == (1, 3, config.vocab_size)

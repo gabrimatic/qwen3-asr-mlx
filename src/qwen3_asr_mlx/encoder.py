@@ -18,20 +18,30 @@ from .config import AudioEncoderConfig
 # Sinusoidal positional embeddings
 # ---------------------------------------------------------------------------
 
-def _sinusoidal_pe(n_positions: int, d_model: int) -> mx.array:
-    """Compute sinusoidal position embeddings for *n_positions* steps.
+class SinusoidalPositionEmbedding(nn.Module):
+    """Precomputed sinusoidal position embeddings.
 
-    Returns shape (1, n_positions, d_model).  Embeddings restart from
-    position 0, so callers must invoke this per-chunk if needed.
+    Stores a (max_positions, d_model) table at init time. The ``__call__``
+    method slices the first *seqlen* rows, so every chunk gets the same
+    positions starting from 0.
     """
-    half = d_model // 2
-    log_timescale = math.log(10000.0) / (half - 1)
-    inv_timescales = mx.exp(-mx.arange(half, dtype=mx.float32) * log_timescale)
-    positions = mx.arange(n_positions, dtype=mx.float32)
-    # (n_positions, half)
-    scaled = positions[:, None] * inv_timescales[None, :]
-    pe = mx.concatenate([mx.sin(scaled), mx.cos(scaled)], axis=-1)  # (T, d_model)
-    return pe[None]  # (1, T, d_model)
+
+    def __init__(self, max_positions: int, d_model: int) -> None:
+        super().__init__()
+        half = d_model // 2
+        log_timescale = math.log(10000.0) / (half - 1)
+        inv_timescales = mx.exp(
+            -mx.arange(half, dtype=mx.float32) * log_timescale
+        )
+        positions = mx.arange(max_positions, dtype=mx.float32)[:, None]
+        scaled = positions * inv_timescales[None, :]
+        self._positional_embedding = mx.concatenate(
+            [mx.sin(scaled), mx.cos(scaled)], axis=1
+        )
+
+    def __call__(self, seqlen: int) -> mx.array:
+        """Return shape (seqlen, d_model)."""
+        return self._positional_embedding[:seqlen, :]
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +49,7 @@ def _sinusoidal_pe(n_positions: int, d_model: int) -> mx.array:
 # ---------------------------------------------------------------------------
 
 class _MultiHeadSelfAttention(nn.Module):
-    """Standard multi-head self-attention (no GQA) with optional windowed mask."""
+    """Standard multi-head self-attention (no GQA) with optional block mask."""
 
     def __init__(self, d_model: int, num_heads: int) -> None:
         super().__init__()
@@ -61,17 +71,17 @@ class _MultiHeadSelfAttention(nn.Module):
         H = self.num_heads
         D = self.head_dim
 
-        q = self.q_proj(x)  # (B, T, d_model)
+        q = self.q_proj(x)
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        # Reshape to (B, H, T, D)
         q = q.reshape(B, T, H, D).transpose(0, 2, 1, 3)
         k = k.reshape(B, T, H, D).transpose(0, 2, 1, 3)
         v = v.reshape(B, T, H, D).transpose(0, 2, 1, 3)
 
-        out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale, mask=mask)
-        # (B, H, T, D) -> (B, T, d_model)
+        out = mx.fast.scaled_dot_product_attention(
+            q, k, v, scale=self.scale, mask=mask
+        )
         out = out.transpose(0, 2, 1, 3).reshape(B, T, H * D)
         return self.out_proj(out)
 
@@ -98,13 +108,11 @@ class EncoderLayer(nn.Module):
         x: mx.array,
         mask: Optional[mx.array] = None,
     ) -> mx.array:
-        # Self-attention block (pre-norm)
         residual = x
         x = self.self_attn_layer_norm(x)
         x = self.self_attn(x, mask=mask)
         x = residual + x
 
-        # Feed-forward block (pre-norm)
         residual = x
         x = self.final_layer_norm(x)
         x = nn.gelu(self.fc1(x))
@@ -131,14 +139,12 @@ class AudioEncoder(nn.Module):
         ``AudioEncoderConfig`` instance.  Defaults match the 1.7B model.
     """
 
-    # Number of mel frames per processing chunk
-    CHUNK_FRAMES: int = 100
-
     def __init__(self, config: AudioEncoderConfig) -> None:
         super().__init__()
         self.config = config
+        self.chunk_size = config.n_window * 2  # 50 * 2 = 100
 
-        # Conv2D stem (3 × stride-2 with GELU, channels-last)
+        # Conv2D stem (3 x stride-2 with GELU, channels-last)
         self.conv2d1 = nn.Conv2d(
             1,
             config.downsample_hidden_size,
@@ -161,12 +167,19 @@ class AudioEncoder(nn.Module):
             padding=1,
         )
 
-        # Linear projection from flattened freq×channel to d_model (no bias)
-        freq_after_conv = config.num_mel_bins // 8  # 128 // 8 = 16
+        # Linear projection from flattened freq x channel to d_model (no bias)
+        freq_after_conv = (
+            ((((config.num_mel_bins + 1) // 2) + 1) // 2 + 1) // 2
+        )
         self.conv_out = nn.Linear(
             config.downsample_hidden_size * freq_after_conv,
             config.d_model,
             bias=False,
+        )
+
+        # Precomputed sinusoidal positional embeddings (per-chunk, not global)
+        self.positional_embedding = SinusoidalPositionEmbedding(
+            config.max_source_positions, config.d_model
         )
 
         # Transformer layers
@@ -178,55 +191,42 @@ class AudioEncoder(nn.Module):
         self.proj2 = nn.Linear(config.d_model, config.output_dim)
 
     # ------------------------------------------------------------------
-    # Conv stem
+    # Helpers
     # ------------------------------------------------------------------
 
-    def _conv_stem(self, chunk: mx.array) -> mx.array:
-        """Run one 100-frame chunk through the conv stem.
+    @staticmethod
+    def _conv_output_length(input_length: int) -> int:
+        """Compute output length after the 3-layer stride-2 conv stem.
 
-        Parameters
-        ----------
-        chunk:
-            Shape (1, n_mels, T_chunk, 1) — batch, freq, time, channels.
-
-        Returns
-        -------
-        mx.array
-            Shape (1, T_out, d_model) where T_out ≈ T_chunk // 8.
+        Each ``Conv2d(stride=2, padding=1, kernel=3)`` maps length *L* to
+        ``(L + 2*1 - 3) // 2 + 1 = (L - 1) // 2 + 1``.
         """
-        x = nn.gelu(self.conv2d1(chunk))   # (1, n_mels/2, T/2, 480)
-        x = nn.gelu(self.conv2d2(x))       # (1, n_mels/4, T/4, 480)
-        x = nn.gelu(self.conv2d3(x))       # (1, n_mels/8, T/8, 480)
+        L = input_length
+        for _ in range(3):
+            L = (L - 1) // 2 + 1
+        return L
 
-        B, freq, time, ch = x.shape
-        # (1, T/8, ch×freq) — channels-major order to match trained conv_out weights
-        x = x.transpose(0, 2, 3, 1).reshape(B, time, ch * freq)
-        # (1, T/8, d_model)
-        x = self.conv_out(x)
-        return x
+    @staticmethod
+    def _block_attention_mask(
+        seq_len: int, cu_seqlens: list[int],
+    ) -> Optional[mx.array]:
+        """Build an additive block-diagonal attention mask.
 
-    # ------------------------------------------------------------------
-    # Windowed attention mask
-    # ------------------------------------------------------------------
+        Each block defined by consecutive entries in *cu_seqlens* can attend
+        only within itself.  Returns ``None`` when a single block covers the
+        entire sequence.
 
-    def _windowed_mask(self, T: int, window: int) -> Optional[mx.array]:
-        """Build an additive attention mask for windowed self-attention.
-
-        Each position can attend only to positions within [i - window, i + window].
-        Returns None when every position falls within the window (dense attention).
-
-        Returns shape (1, 1, T, T) suitable for broadcasting over (B, H, T, T).
+        Returns shape (1, 1, seq_len, seq_len).
         """
-        if T <= window:
-            return None  # All positions within window — use dense attention
+        if len(cu_seqlens) <= 2:
+            return None
 
-        # Absolute position indices
-        rows = mx.arange(T)[:, None]   # (T, 1)
-        cols = mx.arange(T)[None, :]   # (1, T)
-        dist = mx.abs(rows - cols)
-        # Positions outside the window get -inf
-        mask = mx.where(dist <= window, mx.zeros((T, T)), mx.full((T, T), float("-inf")))
-        return mask[None, None]  # (1, 1, T, T)
+        mask = mx.full((seq_len, seq_len), -1e9)
+        for i in range(len(cu_seqlens) - 1):
+            start = cu_seqlens[i]
+            end = cu_seqlens[i + 1]
+            mask[start:end, start:end] = 0.0
+        return mask[None, None]
 
     # ------------------------------------------------------------------
     # Forward
@@ -246,60 +246,81 @@ class AudioEncoder(nn.Module):
         mx.array
             Shape (1, n_tokens, output_dim).
         """
-        # Normalise to (n_mels, T)
         if mel.ndim == 3:
-            mel = mel[0]  # take first item
+            mel = mel[0]
         n_mels, T = mel.shape
+        chunk_size = self.chunk_size
 
-        chunk_size = self.CHUNK_FRAMES
-
-        # ------ chunk the mel into CHUNK_FRAMES windows ------
-        chunks_out: list[mx.array] = []
+        # ------ split mel into chunks, pad last chunk if needed ------
+        chunk_mels: list[mx.array] = []
+        chunk_real_lengths: list[int] = []
         offset = 0
         while offset < T:
-            segment = mel[:, offset : offset + chunk_size]  # (n_mels, ≤100)
-            t = segment.shape[1]
-            if t < chunk_size:
-                # Pad last (or only) chunk with zeros along time axis
-                pad_len = chunk_size - t
-                pad = mx.zeros((n_mels, pad_len), dtype=segment.dtype)
+            segment = mel[:, offset : offset + chunk_size]
+            real_len = segment.shape[1]
+            chunk_real_lengths.append(real_len)
+            if real_len < chunk_size:
+                pad = mx.zeros(
+                    (n_mels, chunk_size - real_len), dtype=segment.dtype
+                )
                 segment = mx.concatenate([segment, pad], axis=1)
-
-            # Reshape to (1, n_mels, T_chunk, 1) for Conv2d
-            x = segment.reshape(1, n_mels, chunk_size, 1)
-            x = self._conv_stem(x)  # (1, T_out, d_model)
-
-            # Sinusoidal PE — restart from 0 for every chunk
-            _, t_out, d = x.shape
-            pe = _sinusoidal_pe(t_out, d)  # (1, T_out, d_model)
-            x = x + pe
-
-            chunks_out.append(x)
+            chunk_mels.append(segment)
             offset += chunk_size
 
-        # Concatenate all chunks along time: (1, total_T_out, d_model)
-        if len(chunks_out) == 1:
-            x = chunks_out[0]
-        else:
-            x = mx.concatenate(chunks_out, axis=1)
+        # ------ batch all chunks through the conv stem ------
+        # (num_chunks, n_mels, chunk_size, 1)
+        batched = mx.stack(chunk_mels, axis=0)[:, :, :, None]
+        x = nn.gelu(self.conv2d1(batched))
+        x = nn.gelu(self.conv2d2(x))
+        x = nn.gelu(self.conv2d3(x))
 
-        # ------ windowed attention through transformer ------
-        # Whisper inference window: n_window_infer=800 frames / 100 frames per chunk × 13 tokens = 104 tokens
-        tokens_per_chunk = x.shape[1] // len(chunks_out)
-        n_chunks_in_window = self.config.n_window_infer // chunk_size
-        window = tokens_per_chunk * n_chunks_in_window  # 13 × 8 = 104
+        B, freq, time, ch = x.shape
+        x = x.transpose(0, 2, 3, 1).reshape(B, time, ch * freq)
+        x = self.conv_out(x)  # (num_chunks, tokens_per_chunk, d_model)
 
-        mask = self._windowed_mask(x.shape[1], window)
+        # ------ per-chunk sinusoidal positional embeddings ------
+        # Each chunk gets the same positions 0..tokens_per_chunk-1.
+        # Applied BEFORE stripping padding, matching training behavior.
+        tokens_per_chunk = x.shape[1]
+        pe = self.positional_embedding(tokens_per_chunk)  # (tokens_per_chunk, d_model)
+        x = x + pe[None, :, :]  # broadcast across all chunks
 
+        # ------ strip padding tokens, keep only valid frames per chunk ------
+        valid_lengths = [
+            self._conv_output_length(rl) for rl in chunk_real_lengths
+        ]
+        hidden_list = [x[i, :valid_lengths[i]] for i in range(len(chunk_mels))]
+        hidden = mx.concatenate(hidden_list, axis=0)  # (total_tokens, d_model)
+
+        # ------ block attention mask ------
+        # Window size in tokens: tokens_per_full_chunk * (n_window_infer / chunk_size)
+        total_tokens = hidden.shape[0]
+        window_tokens = tokens_per_chunk * (
+            self.config.n_window_infer // chunk_size
+        )
+
+        # Build cumulative sequence lengths: fixed-size contiguous blocks
+        cu_seqlens = [0]
+        num_full_windows = total_tokens // window_tokens
+        for _ in range(num_full_windows):
+            cu_seqlens.append(cu_seqlens[-1] + window_tokens)
+        remainder = total_tokens % window_tokens
+        if remainder > 0:
+            cu_seqlens.append(cu_seqlens[-1] + remainder)
+
+        mask = self._block_attention_mask(total_tokens, cu_seqlens)
+
+        # ------ transformer ------
+        hidden = hidden[None]  # (1, total_tokens, d_model)
         for layer in self.layers:
-            x = layer(x, mask=mask)
+            hidden = layer(hidden, mask=mask)
 
         # ------ post-encoder projection ------
-        x = self.ln_post(x)
-        x = nn.gelu(self.proj1(x))
-        x = self.proj2(x)
+        hidden = self.ln_post(hidden)
+        hidden = nn.gelu(self.proj1(hidden))
+        hidden = self.proj2(hidden)
 
-        return x
+        return hidden  # (1, total_tokens, output_dim)
 
 
 # ---------------------------------------------------------------------------

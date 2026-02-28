@@ -21,7 +21,6 @@ from .encoder import AudioEncoder, load_encoder_weights
 from .generate import generate
 from .tokenizer import Tokenizer
 
-
 # ---------------------------------------------------------------------------
 # ISO 639-1 → full name map (subset covering common languages)
 # ---------------------------------------------------------------------------

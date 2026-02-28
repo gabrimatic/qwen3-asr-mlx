@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Special token IDs (Qwen3-ASR)
@@ -133,9 +132,9 @@ class Tokenizer:
         if tokenizer_file.exists():
             self._tok = HFTokenizer.from_file(str(tokenizer_file))
         elif vocab_file.exists() and merges_file.exists():
+            from tokenizers.decoders import ByteLevel as ByteLevelDecoder
             from tokenizers.models import BPE
             from tokenizers.pre_tokenizers import ByteLevel
-            from tokenizers.decoders import ByteLevel as ByteLevelDecoder
 
             vocab = json.loads(vocab_file.read_text(encoding="utf-8"))
             merges_lines = merges_file.read_text(encoding="utf-8").splitlines()

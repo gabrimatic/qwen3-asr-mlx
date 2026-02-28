@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from qwen3_asr_mlx.config import AudioEncoderConfig
-from qwen3_asr_mlx.encoder import AudioEncoder, EncoderLayer, load_encoder_weights, _sinusoidal_pe
+from qwen3_asr_mlx.encoder import AudioEncoder, EncoderLayer, SinusoidalPositionEmbedding, load_encoder_weights
 
 MODEL_PATH = Path(
     "/Users/soroush/.cache/huggingface/hub"
@@ -79,13 +79,14 @@ class TestEncoderForwardShape:
         assert out.shape == (1, 39, 2048), f"Expected (1, 39, 2048), got {out.shape}"
 
     def test_partial_last_chunk_shape(self):
-        """(128, 250) mel input should pad the last chunk and produce (1, 39, 2048)."""
+        """(128, 250) mel input pads last chunk; only valid tokens are kept."""
         encoder = _make_encoder()
         mel = _random_mel(128, 250)
         out = encoder(mel)
         mx.eval(out)
-        # 3 chunks (100+100+50 padded to 100) → 3 × 13 = 39 tokens
-        assert out.shape == (1, 39, 2048), f"Expected (1, 39, 2048), got {out.shape}"
+        # Chunks: 100 (13 tokens) + 100 (13 tokens) + 50 padded to 100 (7 valid tokens)
+        # _conv_output_length(50) = 7; total = 13 + 13 + 7 = 33
+        assert out.shape == (1, 33, 2048), f"Expected (1, 33, 2048), got {out.shape}"
 
     def test_batched_input(self):
         """Encoder should accept (1, 128, 100) batched input."""
@@ -119,73 +120,48 @@ class TestWeightLoading:
 
 
 # ---------------------------------------------------------------------------
-# Windowed attention
+# Block attention mask
 # ---------------------------------------------------------------------------
 
-class TestWindowedAttention:
-    def test_short_sequence_uses_dense_attention(self):
-        """For sequences shorter than the window, mask should be None (dense attention)."""
+class TestBlockAttentionMask:
+    def test_single_block_returns_none(self):
+        """A single block covering the full sequence should return None (dense attention)."""
         encoder = _make_encoder()
-        # window = 13 tokens/chunk × 8 chunks = 104 tokens
-        # 1 chunk = 13 tokens < 104 → dense
-        mask = encoder._windowed_mask(T=13, window=104)
-        assert mask is None, "Short sequence should use dense attention (mask=None)"
+        mask = encoder._block_attention_mask(seq_len=13, cu_seqlens=[0, 13])
+        assert mask is None, "Single block should use dense attention (mask=None)"
 
-    def test_long_sequence_has_mask(self):
-        """For sequences longer than the window, a finite mask should be returned."""
+    def test_two_blocks_has_mask(self):
+        """Two blocks should produce a non-None block-diagonal mask."""
         encoder = _make_encoder()
-        T = 200
-        window = 104
-        mask = encoder._windowed_mask(T=T, window=window)
-        assert mask is not None, "Long sequence should have a windowed mask"
-        assert mask.shape == (1, 1, T, T), f"Unexpected mask shape: {mask.shape}"
+        mask = encoder._block_attention_mask(seq_len=26, cu_seqlens=[0, 13, 26])
+        assert mask is not None, "Two blocks should produce a mask"
+        assert mask.shape == (1, 1, 26, 26), f"Unexpected mask shape: {mask.shape}"
 
-    def test_windowed_mask_blocks_distant_positions(self):
-        """Positions beyond the window distance should receive -inf in the mask."""
+    def test_block_mask_zeros_within_block(self):
+        """Positions within the same block should have mask value 0."""
         encoder = _make_encoder()
-        T = 50
-        window = 5
-        mask = encoder._windowed_mask(T=T, window=window)
+        mask = encoder._block_attention_mask(seq_len=6, cu_seqlens=[0, 3, 6])
         assert mask is not None
         mask_np = np.array(mask[0, 0])
-        # Position 0 should not attend to position window+1
-        assert mask_np[0, window + 1] == float("-inf"), (
-            f"Position 0 should not attend to position {window + 1}"
-        )
-        # Position 0 should attend to position window
-        assert mask_np[0, window] == 0.0, (
-            f"Position 0 should attend to position {window}"
-        )
+        # Within block 0: positions 0-2 attending to 0-2
+        assert mask_np[0, 0] == 0.0
+        assert mask_np[1, 2] == 0.0
+        assert mask_np[2, 0] == 0.0
 
-    def test_short_vs_dense_output_close(self):
-        """For a short sequence, windowed and dense attention should produce identical output."""
-        # Use a tiny config for speed
-        cfg = AudioEncoderConfig(
-            d_model=64,
-            encoder_layers=2,
-            encoder_attention_heads=4,
-            encoder_ffn_dim=128,
-            num_mel_bins=128,
-            output_dim=64,
-            downsample_hidden_size=32,
-        )
-        enc = AudioEncoder(cfg)
-        mel = _random_mel(128, 100)
+    def test_block_mask_large_negative_across_blocks(self):
+        """Positions across different blocks should have large negative mask values."""
+        encoder = _make_encoder()
+        mask = encoder._block_attention_mask(seq_len=6, cu_seqlens=[0, 3, 6])
+        assert mask is not None
+        mask_np = np.array(mask[0, 0])
+        # Block 0 → block 1 cross-attention should be blocked
+        assert mask_np[0, 3] < -1e8, f"Expected large negative, got {mask_np[0, 3]}"
+        assert mask_np[3, 0] < -1e8, f"Expected large negative, got {mask_np[3, 0]}"
 
-        # Forward with dense attention (mask=None explicitly patched)
-        out_dense = enc(mel)
-        mx.eval(out_dense)
-
-        # Since T=13 < window=104, the encoder itself uses dense attention —
-        # recompute with manually forced mask=None to verify they match.
-        out_windowed = enc(mel)
-        mx.eval(out_windowed)
-
-        dense_np = np.array(out_dense)
-        windowed_np = np.array(out_windowed)
-        assert np.allclose(dense_np, windowed_np, atol=1e-4), (
-            "Dense and windowed outputs should match for short sequences"
-        )
+    def test_conv_output_length(self):
+        """_conv_output_length should match empirical conv stem output."""
+        assert AudioEncoder._conv_output_length(100) == 13
+        assert AudioEncoder._conv_output_length(50) == 7
 
 
 # ---------------------------------------------------------------------------
@@ -194,13 +170,29 @@ class TestWindowedAttention:
 
 class TestPositionalEmbeddings:
     def test_pe_shape(self):
-        pe = _sinusoidal_pe(13, 1024)
-        assert pe.shape == (1, 13, 1024)
+        pe_module = SinusoidalPositionEmbedding(max_positions=13, d_model=1024)
+        pe = pe_module(13)
+        mx.eval(pe)
+        assert pe.shape == (13, 1024)
 
     def test_pe_restarts_per_chunk(self):
         """PE should restart from 0 for each chunk (not be cumulative)."""
-        pe1 = _sinusoidal_pe(13, 1024)
-        pe2 = _sinusoidal_pe(13, 1024)
+        pe_module = SinusoidalPositionEmbedding(max_positions=13, d_model=1024)
+        pe1 = pe_module(13)
+        pe2 = pe_module(13)
+        mx.eval(pe1, pe2)
         assert np.allclose(np.array(pe1), np.array(pe2), atol=1e-6), (
             "PE should be deterministic and restart from position 0"
         )
+
+    def test_pe_shorter_slice(self):
+        """Requesting fewer positions should return a prefix of the full table."""
+        pe_module = SinusoidalPositionEmbedding(max_positions=20, d_model=64)
+        pe_full = pe_module(20)
+        pe_short = pe_module(10)
+        mx.eval(pe_full, pe_short)
+        assert np.allclose(
+            np.array(pe_full[:10]),
+            np.array(pe_short),
+            atol=1e-6,
+        ), "Shorter PE should match the prefix of the full PE"

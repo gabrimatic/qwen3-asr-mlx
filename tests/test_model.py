@@ -123,11 +123,11 @@ class TestFindSplitPoints:
 
 
 # ---------------------------------------------------------------------------
-# Language extraction helper
+# Output decoding helper
 # ---------------------------------------------------------------------------
 
-class TestParseTokens:
-    """Tests for the internal _parse_tokens method via a minimal stub."""
+class TestDecodeOutput:
+    """Tests for the internal _decode_output method via a minimal stub."""
 
     @pytest.fixture(scope="class")
     def model(self):
@@ -140,22 +140,25 @@ class TestParseTokens:
         m._tokenizer = Tokenizer(path)
         return m
 
-    def test_extracts_english(self, model):
-        # "language" + " English" + <asr_text> + "Hello." + <|im_end|>
-        tokens = [11528, 6364, 151704, 9707, 13, 151645]
-        text, lang = model._parse_tokens(tokens)
-        assert lang == "English"
+    def test_decodes_transcription(self, model):
+        # "Hello." + <|im_end|>
+        tokens = [9707, 13, 151645]
+        text = model._decode_output(tokens)
         assert "hello" in text.lower()
 
-    def test_unknown_when_no_asr_text(self, model):
-        tokens = [9707, 13, 151645]  # just "Hello." + EOS
-        text, lang = model._parse_tokens(tokens)
-        assert lang == "Unknown"
-
-    def test_strips_eos(self, model):
-        tokens = [11528, 6364, 151704, 9707, 13, 151645]
-        text, _ = model._parse_tokens(tokens)
+    def test_strips_eos_im_end(self, model):
+        tokens = [9707, 13, 151645]  # "Hello." + <|im_end|>
+        text = model._decode_output(tokens)
         assert "<|im_end|>" not in text
+
+    def test_strips_endoftext(self, model):
+        tokens = [9707, 13, 151643]  # "Hello." + <|endoftext|>
+        text = model._decode_output(tokens)
+        assert "<|endoftext|>" not in text
+
+    def test_empty_tokens(self, model):
+        text = model._decode_output([])
+        assert text == ""
 
 
 # ---------------------------------------------------------------------------
