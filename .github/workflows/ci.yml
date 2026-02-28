@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-checks:
+    name: Python checks
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" ruff
+
+      - name: Import smoke test
+        run: |
+          python -c "
+          from qwen3_asr_mlx.model import Qwen3ASR, TranscriptionResult, LANGUAGE_MAP
+          from qwen3_asr_mlx.audio import load_audio, log_mel_spectrogram
+          from qwen3_asr_mlx.encoder import AudioEncoder
+          from qwen3_asr_mlx.decoder import TextDecoder
+          from qwen3_asr_mlx.generate import generate, sample
+          from qwen3_asr_mlx.tokenizer import Tokenizer, build_prompt
+          from qwen3_asr_mlx.config import ModelConfig
+          print('All imports OK')
+          "
+
+      - name: Unit tests
+        run: python -m pytest tests/ -v -m "not slow"
+
+      - name: Lint with ruff
+        run: ruff check src/

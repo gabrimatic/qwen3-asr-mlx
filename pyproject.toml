@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qwen3-asr-mlx"
+version = "0.1.0"
+description = "Qwen3-ASR speech-to-text inference on Apple Silicon via MLX"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Soroush Yousefpour" }
+]
+keywords = ["speech", "transcription", "asr", "mlx", "apple-silicon", "qwen3"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+    "mlx>=0.22.0",
+    "numpy>=1.24.0",
+    "huggingface-hub>=0.20.0",
+    "soundfile>=0.12.0",
+    "tokenizers>=0.15.0",
+]
+
+[project.optional-dependencies]
+audio = ["sounddevice>=0.4.0"]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/gabrimatic/qwen3-asr-mlx"
+Repository = "https://github.com/gabrimatic/qwen3-asr-mlx"
+"Bug Tracker" = "https://github.com/gabrimatic/qwen3-asr-mlx/issues"
+Changelog = "https://github.com/gabrimatic/qwen3-asr-mlx/blob/main/CHANGELOG.md"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qwen3_asr_mlx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests that load the real model weights (deselect with -m 'not slow')",
+]
