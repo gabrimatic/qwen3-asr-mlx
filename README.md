@@ -5,9 +5,9 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)]()
 
-**Qwen3-ASR speech-to-text inference on Apple Silicon via MLX.**
+Qwen3-ASR speech-to-text inference on Apple Silicon via MLX.
 
-Pure MLX implementation of the full [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 1.7B pipeline. No PyTorch, no transformers, no third-party ML frameworks. Three lines to transcribe.
+An MLX implementation of the [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 1.7B pipeline, with no PyTorch or transformers dependency.
 
 > This package provides inference code only. Model weights are developed by [Qwen Team, Alibaba Cloud](https://qwen.ai) under the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0) and downloaded separately from HuggingFace Hub on first use.
 
@@ -37,14 +37,14 @@ Model weights download automatically from HuggingFace Hub on first use.
 
 ## Features
 
-- **Fully on-device** via MLX, no server, no cloud, no network during inference
-- **Pure implementation** with no PyTorch or transformers dependency
-- **All audio formats** via soundfile (WAV, FLAC, MP3, etc.)
-- **Automatic language detection** from model output
-- **Greedy and sampling-based decoding** with repetition penalty, top-k, and nucleus sampling
-- **Thread-safe** with internal lock for concurrent callers
-- **Long audio support** with automatic chunking at low-energy boundaries (up to 20 minutes)
-- **Context manager** for automatic resource cleanup
+- **On-device** via MLX. No server, no network during inference.
+- **No PyTorch or transformers** dependency.
+- **Audio formats** via soundfile (WAV, FLAC, MP3, etc.)
+- **Automatic language detection** from model output.
+- **Greedy and sampling-based decoding** with repetition penalty, top-k, and nucleus sampling.
+- **Thread-safe** with internal lock for concurrent callers.
+- **Long audio support** with automatic chunking at low-energy boundaries (up to 20 minutes).
+- **Context manager** for resource cleanup.
 
 ---
 
