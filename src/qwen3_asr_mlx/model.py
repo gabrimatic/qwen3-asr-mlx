@@ -19,7 +19,7 @@ from .config import ModelConfig
 from .decoder import TextDecoder, load_decoder_weights
 from .encoder import AudioEncoder, load_encoder_weights
 from .generate import generate
-from .tokenizer import Tokenizer
+from .tokenizer import Tokenizer, parse_language_and_output
 
 # ---------------------------------------------------------------------------
 # ISO 639-1 → full name map (subset covering common languages)
@@ -324,7 +324,8 @@ class Qwen3ASR:
                 chunk_duration,
             )
 
-        # 4. Resolve language name for the prompt
+        # 4. Resolve optional language name for the prompt. None means
+        # auto-detect: the model generates "language {name}<asr_text>".
         lang_name = self._resolve_language(language)
 
         # 5. Mel spectrogram
@@ -352,24 +353,36 @@ class Qwen3ASR:
         )
 
         # 9. Decode
-        text = self._decode_output(output_tokens)
+        text, detected_language = self._decode_tokens(output_tokens, lang_name)
 
-        return TranscriptionResult(text=text, language=lang_name, duration=duration)
+        return TranscriptionResult(text=text, language=detected_language, duration=duration)
 
-    def _resolve_language(self, language: Optional[str]) -> str:
+    def _resolve_language(self, language: Optional[str]) -> Optional[str]:
         """Map user-provided language hint to a full language name.
 
-        Returns ``"English"`` when no hint is given (the model's default).
+        Returns ``None`` when no hint is given so the model can auto-detect.
         """
         if language is None or language.lower() in ("auto", ""):
-            return "English"
-        return LANGUAGE_MAP.get(language.lower(), language)
+            return None
+
+        mapped = LANGUAGE_MAP.get(language.lower(), language)
+        supported = {lang.lower(): lang for lang in self._config.support_languages}
+        return supported.get(mapped.lower(), mapped)
 
     def _decode_output(self, tokens: list[int]) -> str:
-        """Decode generated tokens into transcription text.
+        """Decode generated tokens into transcription text."""
+        text, _ = self._decode_tokens(tokens, prompted_language=None)
+        return text
 
-        Since ``language {name}<asr_text>`` is now part of the prompt, the
-        model output contains only the transcription followed by EOS.
+    def _decode_tokens(
+        self,
+        tokens: list[int],
+        prompted_language: Optional[str],
+    ) -> tuple[str, str]:
+        """Decode generated tokens into ``(text, language)``.
+
+        When *prompted_language* is ``None``, Qwen3-ASR is expected to emit
+        ``language {detected}<asr_text>`` before the transcription.
         """
         from .tokenizer import EOS_TOKEN_IDS
 
@@ -377,7 +390,15 @@ class Qwen3ASR:
         while tokens and tokens[-1] in EOS_TOKEN_IDS:
             tokens = tokens[:-1]
 
-        return self._tokenizer.decode(tokens, skip_special_tokens=True).strip()
+        if prompted_language is not None:
+            return (
+                self._tokenizer.decode(tokens, skip_special_tokens=True).strip(),
+                prompted_language,
+            )
+
+        raw = self._tokenizer.decode(tokens, skip_special_tokens=False)
+        language, text = parse_language_and_output(raw)
+        return text, language
 
     def _transcribe_chunked(
         self,
@@ -403,6 +424,7 @@ class Qwen3ASR:
         split_points = _find_split_points(samples, chunk_samples, search_samples)
 
         lang_name = self._resolve_language(language)
+        detected_language = lang_name or "Unknown"
         texts: list[str] = []
 
         prev = 0
@@ -434,7 +456,10 @@ class Qwen3ASR:
                 repetition_context_size=repetition_context_size,
             )
 
-            chunk_text = self._decode_output(output_tokens)
+            chunk_text, chunk_language = self._decode_tokens(output_tokens, lang_name)
+            if lang_name is None and chunk_language:
+                lang_name = chunk_language
+            detected_language = chunk_language or detected_language
             if chunk_text:
                 texts.append(chunk_text)
 
@@ -442,7 +467,7 @@ class Qwen3ASR:
 
         return TranscriptionResult(
             text=" ".join(texts),
-            language=lang_name,
+            language=detected_language,
             duration=duration,
         )
 

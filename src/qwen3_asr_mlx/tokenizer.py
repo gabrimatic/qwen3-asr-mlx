@@ -22,6 +22,15 @@ ENDOFTEXT_TOKEN_ID: int = 151643
 ASR_TEXT_TOKEN_ID: int = 151704
 
 EOS_TOKEN_IDS: frozenset[int] = frozenset({ENDOFTEXT_TOKEN_ID, IM_END_TOKEN_ID})
+SPECIAL_TOKEN_TEXT: dict[int, str] = {
+    ENDOFTEXT_TOKEN_ID: "<|endoftext|>",
+    IM_START_TOKEN_ID: "<|im_start|>",
+    IM_END_TOKEN_ID: "<|im_end|>",
+    AUDIO_START_TOKEN_ID: "<|audio_start|>",
+    AUDIO_END_TOKEN_ID: "<|audio_end|>",
+    AUDIO_PAD_TOKEN_ID: "<|audio_pad|>",
+    ASR_TEXT_TOKEN_ID: "<asr_text>",
+}
 
 # Prompt prefix and suffix token IDs (Qwen3-ASR chat template)
 _PROMPT_PREFIX: list[int] = [
@@ -59,10 +68,11 @@ def build_prompt(
 ) -> list[int]:
     """Return the full input_ids for a Qwen3-ASR inference prompt.
 
-    The Qwen3-ASR chat template requires the assistant turn to begin with
-    ``language {name}<asr_text>`` before the model generates transcription
-    tokens.  If *language_name_tokens* is ``None``, the caller must provide
-    pre-encoded tokens for the language name via ``Tokenizer.encode()``.
+    If *language_name_tokens* is provided, the assistant turn begins with
+    ``language {name}<asr_text>`` and the model generates only transcription
+    tokens.  If it is ``None``, the assistant turn is left empty so the model
+    can auto-detect language by generating ``language {detected}<asr_text>``
+    before the transcription.
 
     Structure::
 
@@ -73,17 +83,14 @@ def build_prompt(
         <|im_start|>assistant\\n
         language {name}<asr_text>
     """
-    if language_name_tokens is None:
-        language_name_tokens = []
-
-    return (
+    prompt = (
         _PROMPT_PREFIX
         + [AUDIO_PAD_TOKEN_ID] * n_audio_tokens
         + _PROMPT_SUFFIX
-        + [_LANGUAGE_TOKEN_ID]
-        + language_name_tokens
-        + [ASR_TEXT_TOKEN_ID]
     )
+    if language_name_tokens is not None:
+        prompt += [_LANGUAGE_TOKEN_ID] + language_name_tokens + [ASR_TEXT_TOKEN_ID]
+    return prompt
 
 
 def parse_output(text: str) -> str:
@@ -106,6 +113,19 @@ def parse_output(text: str) -> str:
     # Fallback: strip "language <lang>" preamble if present
     stripped = re.sub(r"^language\s+\S+\s*", "", text, flags=re.IGNORECASE)
     return stripped.strip()
+
+
+def parse_language_and_output(text: str, default_language: str = "English") -> tuple[str, str]:
+    """Extract ``(language, transcription)`` from a Qwen3-ASR output string."""
+    text = text.replace("<|im_end|>", "").replace("<|endoftext|>", "")
+    asr_tag = "<asr_text>"
+    if text.startswith("language ") and asr_tag in text:
+        language = text[len("language ") : text.find(asr_tag)].strip()
+        transcript = text[text.find(asr_tag) + len(asr_tag) :].strip()
+        if language.lower() in ("", "none", "unknown"):
+            language = default_language
+        return language or default_language, transcript
+    return default_language, parse_output(text)
 
 
 # ---------------------------------------------------------------------------
@@ -159,13 +179,34 @@ class Tokenizer:
 
     def decode(self, token_ids: list[int], skip_special_tokens: bool = True) -> str:
         """Decode a list of token IDs back to a string."""
-        return self._tok.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        parts: list[str] = []
+        regular_tokens: list[int] = []
+
+        def flush_regular() -> None:
+            if regular_tokens:
+                parts.append(self._tok.decode(regular_tokens, skip_special_tokens=skip_special_tokens))
+                regular_tokens.clear()
+
+        for token_id in token_ids:
+            special_text = SPECIAL_TOKEN_TEXT.get(token_id)
+            if special_text is None:
+                regular_tokens.append(token_id)
+                continue
+
+            flush_regular()
+            if not skip_special_tokens:
+                parts.append(special_text)
+
+        flush_regular()
+        return "".join(parts)
 
     # Convenience wrappers that delegate to the module-level functions so that
     # callers do not need to import them separately.
 
-    def build_prompt(self, n_audio_tokens: int, language: str = "English") -> list[int]:
+    def build_prompt(self, n_audio_tokens: int, language: str | None = None) -> list[int]:
         """Return the full prompt input_ids with language baked in."""
+        if language is None:
+            return build_prompt(n_audio_tokens)
         lang_tokens = self.encode(f" {language}")
         return build_prompt(n_audio_tokens, lang_tokens)
 

@@ -30,7 +30,13 @@ class AudioEncoderConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AudioEncoderConfig":
-        audio_cfg = d.get("audio_encoder_config", d)
+        thinker_cfg = d.get("thinker_config", {})
+        audio_cfg = (
+            d.get("audio_encoder_config")
+            or d.get("audio_config")
+            or thinker_cfg.get("audio_config")
+            or d
+        )
         return cls(
             d_model=audio_cfg.get("d_model", cls.d_model),
             encoder_layers=audio_cfg.get(
@@ -78,26 +84,33 @@ class TextDecoderConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "TextDecoderConfig":
+        thinker_cfg = d.get("thinker_config", {})
+        text_cfg = (
+            d.get("text_decoder_config")
+            or d.get("text_config")
+            or thinker_cfg.get("text_config")
+            or d
+        )
         return cls(
-            hidden_size=d.get("hidden_size", cls.hidden_size),
-            num_hidden_layers=d.get("num_hidden_layers", cls.num_hidden_layers),
-            num_attention_heads=d.get(
+            hidden_size=text_cfg.get("hidden_size", cls.hidden_size),
+            num_hidden_layers=text_cfg.get("num_hidden_layers", cls.num_hidden_layers),
+            num_attention_heads=text_cfg.get(
                 "num_attention_heads", cls.num_attention_heads
             ),
-            num_key_value_heads=d.get(
+            num_key_value_heads=text_cfg.get(
                 "num_key_value_heads", cls.num_key_value_heads
             ),
-            head_dim=d.get("head_dim", cls.head_dim),
-            intermediate_size=d.get("intermediate_size", cls.intermediate_size),
-            hidden_act=d.get("hidden_act", cls.hidden_act),
-            vocab_size=d.get("vocab_size", cls.vocab_size),
-            max_position_embeddings=d.get(
+            head_dim=text_cfg.get("head_dim", cls.head_dim),
+            intermediate_size=text_cfg.get("intermediate_size", cls.intermediate_size),
+            hidden_act=text_cfg.get("hidden_act", cls.hidden_act),
+            vocab_size=text_cfg.get("vocab_size", cls.vocab_size),
+            max_position_embeddings=text_cfg.get(
                 "max_position_embeddings", cls.max_position_embeddings
             ),
-            rms_norm_eps=d.get("rms_norm_eps", cls.rms_norm_eps),
-            rope_theta=d.get("rope_theta", cls.rope_theta),
-            mrope_section=d.get("mrope_section", [24, 20, 20]),
-            rope_interleaved=d.get("rope_interleaved", cls.rope_interleaved),
+            rms_norm_eps=text_cfg.get("rms_norm_eps", cls.rms_norm_eps),
+            rope_theta=text_cfg.get("rope_theta", cls.rope_theta),
+            mrope_section=text_cfg.get("mrope_section", [24, 20, 20]),
+            rope_interleaved=text_cfg.get("rope_interleaved", cls.rope_interleaved),
         )
 
 
@@ -114,17 +127,42 @@ class ModelConfig:
     audio_token_id: int = 151676
     audio_start_token_id: int = 151669
     audio_end_token_id: int = 151670
+    support_languages: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ModelConfig":
-        audio_encoder = AudioEncoderConfig.from_dict(d)
-        text_decoder = TextDecoderConfig.from_dict(d)
+        thinker_cfg = d.get("thinker_config", {})
+        audio_source = (
+            d.get("audio_encoder_config")
+            or d.get("audio_config")
+            or thinker_cfg.get("audio_config")
+            or d
+        )
+        text_source = (
+            d.get("text_decoder_config")
+            or d.get("text_config")
+            or thinker_cfg.get("text_config")
+            or d
+        )
+        audio_encoder = AudioEncoderConfig.from_dict(audio_source)
+        text_decoder = TextDecoderConfig.from_dict(text_source)
         return cls(
             audio_encoder=audio_encoder,
             text_decoder=text_decoder,
-            audio_token_id=d.get("audio_token_id", 151676),
-            audio_start_token_id=d.get("audio_start_token_id", 151669),
-            audio_end_token_id=d.get("audio_end_token_id", 151670),
+            audio_token_id=thinker_cfg.get(
+                "audio_token_id", d.get("audio_token_id", 151676)
+            ),
+            audio_start_token_id=thinker_cfg.get(
+                "audio_start_token_id", d.get("audio_start_token_id", 151669)
+            ),
+            audio_end_token_id=thinker_cfg.get(
+                "audio_end_token_id", d.get("audio_end_token_id", 151670)
+            ),
+            support_languages=list(
+                d.get("support_languages")
+                or thinker_cfg.get("support_languages")
+                or []
+            ),
         )
 
     @classmethod

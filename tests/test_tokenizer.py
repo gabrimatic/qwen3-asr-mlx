@@ -13,18 +13,25 @@ from qwen3_asr_mlx.tokenizer import (
     EOS_TOKEN_IDS,
     IM_END_TOKEN_ID,
     IM_START_TOKEN_ID,
+    SPECIAL_TOKEN_TEXT,
     _PROMPT_PREFIX,
     _PROMPT_SUFFIX,
     build_prompt,
+    parse_language_and_output,
     parse_output,
 )
 
 
 class TestBuildPrompt:
     def test_zero_audio_tokens(self):
-        # With no language tokens, prompt ends with suffix + language_token + asr_text_token
+        # With no language tokens, the assistant turn is left empty so the
+        # model can auto-detect language.
         ids = build_prompt(0)
-        assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX + [11528, ASR_TEXT_TOKEN_ID]
+        assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX
+
+    def test_language_hint_tokens(self):
+        ids = build_prompt(0, [220, 9707])
+        assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX + [11528, 220, 9707, ASR_TEXT_TOKEN_ID]
 
     def test_audio_tokens_present(self):
         n = 10
@@ -37,8 +44,7 @@ class TestBuildPrompt:
         assert ids[: len(_PROMPT_PREFIX)] == _PROMPT_PREFIX
 
     def test_suffix_tokens(self):
-        # _PROMPT_SUFFIX appears immediately after the audio tokens; the prompt
-        # continues with language prefix tokens before <asr_text>.
+        # _PROMPT_SUFFIX appears immediately after the audio tokens.
         n = 5
         ids = build_prompt(n)
         suffix_start = len(_PROMPT_PREFIX) + n
@@ -73,13 +79,12 @@ class TestBuildPrompt:
         assert _PROMPT_SUFFIX == expected_suffix
 
     def test_total_length(self):
-        # build_prompt with no language_name_tokens appends: language_token + asr_text_token (2 tokens)
         n = 7
         ids = build_prompt(n)
-        assert len(ids) == len(_PROMPT_PREFIX) + n + len(_PROMPT_SUFFIX) + 2
+        assert len(ids) == len(_PROMPT_PREFIX) + n + len(_PROMPT_SUFFIX)
 
-    def test_ends_with_asr_text_token(self):
-        ids = build_prompt(5)
+    def test_language_hint_ends_with_asr_text_token(self):
+        ids = build_prompt(5, [220, 9707])
         assert ids[-1] == ASR_TEXT_TOKEN_ID
 
     def test_large_audio_token_count(self):
@@ -116,6 +121,33 @@ class TestParseOutput:
     def test_multiword_transcription(self):
         text = "language English<asr_text>The quick brown fox.<|im_end|>"
         assert parse_output(text) == "The quick brown fox."
+
+
+class TestParseLanguageAndOutput:
+    def test_extracts_language_and_text(self):
+        language, text = parse_language_and_output(
+            "language German<asr_text>Guten Morgen.<|im_end|>"
+        )
+        assert language == "German"
+        assert text == "Guten Morgen."
+
+    def test_fallback_language(self):
+        language, text = parse_language_and_output("Hello world.", default_language="English")
+        assert language == "English"
+        assert text == "Hello world."
+
+    def test_none_language_falls_back(self):
+        language, text = parse_language_and_output(
+            "language None<asr_text><|im_end|>",
+            default_language="English",
+        )
+        assert language == "English"
+        assert text == ""
+
+
+class TestSpecialTokenText:
+    def test_asr_text_mapping(self):
+        assert SPECIAL_TOKEN_TEXT[ASR_TEXT_TOKEN_ID] == "<asr_text>"
 
 
 class TestSpecialTokenIds:

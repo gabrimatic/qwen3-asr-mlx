@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qwen3-asr-mlx"
-version = "0.1.0"
+version = "0.1.1"
 description = "Qwen3-ASR speech-to-text inference on Apple Silicon via MLX"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 authors = [
     { name = "Soroush Yousefpour" }
 ]
@@ -27,11 +27,11 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = [
-    "mlx>=0.22.0",
-    "numpy>=1.24.0",
-    "huggingface-hub>=0.20.0",
-    "soundfile>=0.12.0",
-    "tokenizers>=0.15.0",
+    "mlx>=0.31.1",
+    "numpy>=1.26.4",
+    "huggingface-hub>=1.0.0",
+    "soundfile>=0.13.1",
+    "tokenizers>=0.23.0",
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)]()
+[![Python 3.10–3.13](https://img.shields.io/badge/Python-3.10--3.13-blue.svg)]()
 
 Qwen3-ASR speech-to-text inference on Apple Silicon via MLX.
 
@@ -15,7 +15,7 @@ An MLX implementation of the [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 1.
 
 ## Quick Start
 
-**Apple Silicon required.** Python 3.10+, MLX 0.22+.
+**Apple Silicon required.** Python 3.10–3.13, MLX 0.31+.
 
 ```bash
 pip install qwen3-asr-mlx
@@ -67,7 +67,7 @@ Transcribe audio to text.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `audio` | `str`, `Path`, or `np.ndarray` | required | File path or float32 numpy array at 16 kHz mono |
-| `language` | `str` or `None` | `None` | Optional language hint (ISO 639-1 code or full name) |
+| `language` | `str` or `None` | `None` | Optional language hint (ISO 639-1 code or full name). `None` lets the model detect the language. |
 | `temperature` | `float` | `0.0` | Sampling temperature; `0.0` = greedy |
 | `top_p` | `float` | `1.0` | Nucleus sampling threshold |
 | `top_k` | `int` | `0` | Top-k cutoff (`0` = disabled) |
@@ -124,8 +124,8 @@ TranscriptionResult { text, language, duration }
 
 - Apple Silicon Mac (M1 or later)
 - macOS 13+
-- Python 3.10+
-- MLX 0.22+
+- Python 3.10–3.13
+- MLX 0.31+
 
 ---
 

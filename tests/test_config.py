@@ -46,6 +46,29 @@ _SAMPLE_CONFIG: dict = {
     "rope_interleaved": True,
 }
 
+_CURRENT_HF_CONFIG: dict = {
+    "architectures": ["Qwen3ASRForConditionalGeneration"],
+    "model_type": "qwen3_asr",
+    "support_languages": ["Chinese", "English", "German"],
+    "thinker_config": {
+        "model_type": "qwen3_asr",
+        "audio_config": _SAMPLE_CONFIG["audio_encoder_config"],
+        "text_config": {
+            "hidden_size": 1024,
+            "num_hidden_layers": 20,
+            "num_attention_heads": 16,
+            "num_key_value_heads": 8,
+            "head_dim": 64,
+            "intermediate_size": 4096,
+            "hidden_act": "silu",
+            "vocab_size": 151936,
+            "max_position_embeddings": 65536,
+            "rms_norm_eps": 1e-6,
+            "rope_theta": 1000000.0,
+        },
+    },
+}
+
 
 class TestAudioEncoderConfig:
     def test_from_dict_defaults(self):
@@ -68,6 +91,11 @@ class TestAudioEncoderConfig:
         assert cfg.num_mel_bins == 128
         assert cfg.encoder_layers == 24
 
+    def test_from_current_hf_nested_config(self):
+        cfg = AudioEncoderConfig.from_dict(_CURRENT_HF_CONFIG)
+        assert cfg.d_model == 1024
+        assert cfg.encoder_layers == 24
+
 
 class TestTextDecoderConfig:
     def test_from_dict(self):
@@ -86,6 +114,12 @@ class TestTextDecoderConfig:
         assert cfg.mrope_section == [24, 20, 20]
         assert cfg.rope_interleaved is True
 
+    def test_from_current_hf_nested_config(self):
+        cfg = TextDecoderConfig.from_dict(_CURRENT_HF_CONFIG)
+        assert cfg.hidden_size == 1024
+        assert cfg.num_hidden_layers == 20
+        assert cfg.head_dim == 64
+
 
 class TestModelConfig:
     def test_from_dict(self):
@@ -95,6 +129,13 @@ class TestModelConfig:
         assert cfg.audio_end_token_id == 151670
         assert isinstance(cfg.audio_encoder, AudioEncoderConfig)
         assert isinstance(cfg.text_decoder, TextDecoderConfig)
+        assert cfg.support_languages == []
+
+    def test_from_current_hf_nested_config(self):
+        cfg = ModelConfig.from_dict(_CURRENT_HF_CONFIG)
+        assert cfg.audio_encoder.d_model == 1024
+        assert cfg.text_decoder.hidden_size == 1024
+        assert cfg.support_languages == ["Chinese", "English", "German"]
 
     def test_nested_audio_encoder(self):
         cfg = ModelConfig.from_dict(_SAMPLE_CONFIG)

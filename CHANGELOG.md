@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-05-12
+
+### Changed
+
+- Require MLX 0.31+ and align dependency floors with current MLX audio packages.
+- Parse the current Hugging Face `thinker_config.audio_config` and `thinker_config.text_config` layout instead of relying on baked-in defaults.
+- Let `language=None` use Qwen3-ASR auto language detection, while preserving explicit language hints.
+- Decode the generated `<asr_text>` boundary from special token IDs so auto-detected language output is parsed correctly.
+- Constrain Python support to 3.10-3.13, matching current MLX wheels.
+- Update README language and runtime requirements.
+
 ## [0.1.0] - 2026-02-28
 
 ### Added

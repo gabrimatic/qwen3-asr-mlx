@@ -136,7 +136,12 @@ class TestDecodeOutput:
         from huggingface_hub import snapshot_download
 
         m = object.__new__(Qwen3ASR)
-        path = Path(snapshot_download("mlx-community/Qwen3-ASR-1.7B-bf16"))
+        path = Path(
+            snapshot_download(
+                "mlx-community/Qwen3-ASR-1.7B-bf16",
+                allow_patterns=["vocab.json", "merges.txt", "tokenizer_config.json"],
+            )
+        )
         m._tokenizer = Tokenizer(path)
         return m
 
@@ -145,6 +150,18 @@ class TestDecodeOutput:
         tokens = [9707, 13, 151645]
         text = model._decode_output(tokens)
         assert "hello" in text.lower()
+
+    def test_decodes_auto_language_prefix(self, model):
+        from qwen3_asr_mlx.tokenizer import ASR_TEXT_TOKEN_ID
+
+        tokens = (
+            model._tokenizer.encode("language German")
+            + [ASR_TEXT_TOKEN_ID]
+            + model._tokenizer.encode("Guten Morgen.")
+            + [151645]
+        )
+        text = model._decode_output(tokens)
+        assert text == "Guten Morgen."
 
     def test_strips_eos_im_end(self, model):
         tokens = [9707, 13, 151645]  # "Hello." + <|im_end|>

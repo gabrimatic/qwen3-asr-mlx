@@ -3,7 +3,7 @@
 
 """qwen3-asr-mlx: Qwen3-ASR inference on Apple Silicon via MLX."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .audio import load_audio, log_mel_spectrogram
 from .config import AudioEncoderConfig, ModelConfig, TextDecoderConfig
@@ -11,7 +11,7 @@ from .decoder import KVCache, TextDecoder, load_decoder_weights
 from .encoder import AudioEncoder, load_encoder_weights
 from .generate import generate, prepare_inputs, sample
 from .model import LANGUAGE_MAP, Qwen3ASR, TranscriptionResult
-from .tokenizer import Tokenizer, build_prompt, parse_output
+from .tokenizer import Tokenizer, build_prompt, parse_language_and_output, parse_output
 
 __all__ = [
     "__version__",
@@ -30,6 +30,7 @@ __all__ = [
     "sample",
     "Tokenizer",
     "build_prompt",
+    "parse_language_and_output",
     "parse_output",
     "Qwen3ASR",
     "TranscriptionResult",
