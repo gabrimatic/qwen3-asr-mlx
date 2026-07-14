@@ -1,5 +1,6 @@
 # qwen3-asr-mlx
 
+[![PyPI](https://img.shields.io/pypi/v/qwen3-asr-mlx.svg)](https://pypi.org/project/qwen3-asr-mlx/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
