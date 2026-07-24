@@ -202,6 +202,7 @@ class Qwen3ASR:
         max_tokens: Optional[int] = None,
         repetition_context_size: int = 100,
         chunk_duration: float = 1200.0,
+        context: Optional[str] = None,
     ) -> TranscriptionResult:
         """Transcribe audio to text.
 
@@ -230,16 +231,25 @@ class Qwen3ASR:
         chunk_duration:
             Maximum seconds per chunk.  Audio longer than this is split at
             low-energy boundaries and transcribed in pieces.
+        context:
+            Optional free-form context or hotwords. The text is placed in the
+            Qwen3-ASR system prompt, for example
+            ``"Vocabulary: Quilter, apostle, gospel."``.
 
         Returns
         -------
         TranscriptionResult
             Dataclass with ``text``, ``language``, and ``duration`` fields.
         """
+        if context is not None and not isinstance(context, str):
+            raise TypeError("context must be a string or None")
+        context = context.strip() or None if context is not None else None
+
         with self._lock:
             return self._transcribe_impl(
                 audio,
                 language,
+                context,
                 temperature,
                 top_p,
                 top_k,
@@ -282,6 +292,7 @@ class Qwen3ASR:
         self,
         audio: str | Path | np.ndarray,
         language: Optional[str],
+        context: Optional[str],
         temperature: float,
         top_p: float,
         top_k: int,
@@ -315,6 +326,7 @@ class Qwen3ASR:
                 samples,
                 duration,
                 language,
+                context,
                 temperature,
                 top_p,
                 top_k,
@@ -337,7 +349,7 @@ class Qwen3ASR:
 
         # 7. Build prompt (includes "language {name}<asr_text>" in assistant turn)
         n_audio_tokens = encoder_output.shape[1]
-        input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name)
+        input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name, context)
 
         # 8. Generate (model outputs only the transcription text)
         output_tokens = generate(
@@ -405,6 +417,7 @@ class Qwen3ASR:
         samples: np.ndarray,
         duration: float,
         language: Optional[str],
+        context: Optional[str],
         temperature: float,
         top_p: float,
         top_k: int,
@@ -442,7 +455,7 @@ class Qwen3ASR:
             mx.eval(encoder_output)
 
             n_audio_tokens = encoder_output.shape[1]
-            input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name)
+            input_ids = self._tokenizer.build_prompt(n_audio_tokens, lang_name, context)
 
             output_tokens = generate(
                 self._decoder,

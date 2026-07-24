@@ -132,8 +132,10 @@ class TestDecodeOutput:
     @pytest.fixture(scope="class")
     def model(self):
         from pathlib import Path
-        from qwen3_asr_mlx.tokenizer import Tokenizer
+
         from huggingface_hub import snapshot_download
+
+        from qwen3_asr_mlx.tokenizer import Tokenizer
 
         m = object.__new__(Qwen3ASR)
         path = Path(
@@ -195,6 +197,40 @@ class TestMaxTokensComputation:
         assert computed == expected_min
 
 
+class TestContextPrompt:
+    def test_existing_positional_arguments_remain_compatible(self):
+        model = object.__new__(Qwen3ASR)
+        model._lock = __import__("threading").Lock()
+        captured = {}
+
+        def fake_impl(*args):
+            captured["args"] = args
+            return TranscriptionResult(text="", language="English", duration=0.0)
+
+        model._transcribe_impl = fake_impl
+        model.transcribe(_silence(), "en", 0.25)
+        assert captured["args"][1:4] == ("en", None, 0.25)
+
+    def test_public_api_forwards_normalized_context(self):
+        model = object.__new__(Qwen3ASR)
+        model._lock = __import__("threading").Lock()
+        captured = {}
+
+        def fake_impl(*args):
+            captured["args"] = args
+            return TranscriptionResult(text="", language="Unknown", duration=0.0)
+
+        model._transcribe_impl = fake_impl
+        model.transcribe(_silence(), context="  Vocabulary: Quilter.  ")
+        assert captured["args"][2] == "Vocabulary: Quilter."
+
+    def test_public_api_rejects_non_string_context(self):
+        model = object.__new__(Qwen3ASR)
+        model._lock = __import__("threading").Lock()
+        with pytest.raises(TypeError, match="context must be a string or None"):
+            model.transcribe(_silence(), context=["Quilter"])  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------------------
 # Real model tests (marked slow)
 # ---------------------------------------------------------------------------
@@ -243,6 +279,13 @@ class TestTranscribe:
 
     def test_transcribe_with_language_hint(self, model):
         result = model.transcribe(_silence(0.5), language="en")
+        assert isinstance(result, TranscriptionResult)
+
+    def test_transcribe_with_context(self, model):
+        result = model.transcribe(
+            _silence(0.5),
+            context="Vocabulary: Quilter, apostle, gospel.",
+        )
         assert isinstance(result, TranscriptionResult)
 
     def test_transcribe_tone_returns_result(self, model):

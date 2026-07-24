@@ -32,11 +32,15 @@ SPECIAL_TOKEN_TEXT: dict[int, str] = {
     ASR_TEXT_TOKEN_ID: "<asr_text>",
 }
 
-# Prompt prefix and suffix token IDs (Qwen3-ASR chat template)
-_PROMPT_PREFIX: list[int] = [
+# Prompt sections (Qwen3-ASR chat template). Context belongs in the system
+# message, between _SYSTEM_PREFIX and _SYSTEM_SUFFIX.
+_SYSTEM_PREFIX: list[int] = [
     IM_START_TOKEN_ID,  # <|im_start|>
     8948,               # "system"
     198,                # "\n"
+]
+
+_SYSTEM_SUFFIX: list[int] = [
     IM_END_TOKEN_ID,    # <|im_end|>
     198,                # "\n"
     IM_START_TOKEN_ID,  # <|im_start|>
@@ -44,6 +48,10 @@ _PROMPT_PREFIX: list[int] = [
     198,                # "\n"
     AUDIO_START_TOKEN_ID,  # <|audio_start|>
 ]
+
+# Retained as the exact legacy empty-system prompt prefix for callers and tests
+# that imported this private constant.
+_PROMPT_PREFIX: list[int] = _SYSTEM_PREFIX + _SYSTEM_SUFFIX
 
 _PROMPT_SUFFIX: list[int] = [
     AUDIO_END_TOKEN_ID,  # <|audio_end|>
@@ -65,8 +73,13 @@ _LANGUAGE_TOKEN_ID: int = 11528
 def build_prompt(
     n_audio_tokens: int,
     language_name_tokens: list[int] | None = None,
+    context_tokens: list[int] | None = None,
 ) -> list[int]:
     """Return the full input_ids for a Qwen3-ASR inference prompt.
+
+    If *context_tokens* is provided, those tokens are placed in the system
+    message. This is the context/hotwords mechanism introduced by the official
+    Qwen3-ASR chat template.
 
     If *language_name_tokens* is provided, the assistant turn begins with
     ``language {name}<asr_text>`` and the model generates only transcription
@@ -76,7 +89,7 @@ def build_prompt(
 
     Structure::
 
-        <|im_start|>system\\n<|im_end|>\\n
+        <|im_start|>system\\n{context}<|im_end|>\\n
         <|im_start|>user\\n
         <|audio_start|><|audio_pad|>×N<|audio_end|>
         <|im_end|>\\n
@@ -84,7 +97,9 @@ def build_prompt(
         language {name}<asr_text>
     """
     prompt = (
-        _PROMPT_PREFIX
+        _SYSTEM_PREFIX
+        + (context_tokens or [])
+        + _SYSTEM_SUFFIX
         + [AUDIO_PAD_TOKEN_ID] * n_audio_tokens
         + _PROMPT_SUFFIX
     )
@@ -203,12 +218,18 @@ class Tokenizer:
     # Convenience wrappers that delegate to the module-level functions so that
     # callers do not need to import them separately.
 
-    def build_prompt(self, n_audio_tokens: int, language: str | None = None) -> list[int]:
-        """Return the full prompt input_ids with language baked in."""
-        if language is None:
-            return build_prompt(n_audio_tokens)
-        lang_tokens = self.encode(f" {language}")
-        return build_prompt(n_audio_tokens, lang_tokens)
+    def build_prompt(
+        self,
+        n_audio_tokens: int,
+        language: str | None = None,
+        context: str | None = None,
+    ) -> list[int]:
+        """Return full prompt input IDs with optional language and context."""
+        if context is not None and not isinstance(context, str):
+            raise TypeError("context must be a string or None")
+        lang_tokens = self.encode(f" {language}") if language is not None else None
+        context_tokens = self.encode(context) if context else None
+        return build_prompt(n_audio_tokens, lang_tokens, context_tokens)
 
     def parse_output(self, text: str) -> str:
         """Extract transcription from model output (delegates to module-level helper)."""

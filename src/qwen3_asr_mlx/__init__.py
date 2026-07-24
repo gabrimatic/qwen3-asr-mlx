@@ -3,7 +3,7 @@
 
 """qwen3-asr-mlx: Qwen3-ASR inference on Apple Silicon via MLX."""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 from .audio import load_audio, log_mel_spectrogram
 from .config import AudioEncoderConfig, ModelConfig, TextDecoderConfig

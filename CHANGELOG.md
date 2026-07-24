@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-07-24
+
+### Added
+
+- Support the official Qwen3-ASR context and hotwords prompt format through the
+  new `context` argument to `Qwen3ASR.transcribe`.
+- Apply the same context to every segment when long audio is transcribed in
+  chunks.
+- Validate the context type before inference and preserve the exact legacy
+  prompt when no context is supplied.
+- Document and validate both maintained MLX-compatible Qwen3-ASR variants:
+  0.6B and 1.7B.
+
 ## [0.1.1] - 2026-05-12
 
 ### Changed

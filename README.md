@@ -8,7 +8,8 @@
 
 Qwen3-ASR speech-to-text inference on Apple Silicon via MLX.
 
-An MLX implementation of the [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 1.7B pipeline, with no PyTorch or transformers dependency.
+An MLX implementation of the [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)
+0.6B and 1.7B pipelines, with no PyTorch or transformers dependency.
 
 > This package provides inference code only. Model weights are developed by [Qwen Team, Alibaba Cloud](https://qwen.ai) under the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0) and downloaded separately from HuggingFace Hub on first use.
 
@@ -26,13 +27,20 @@ pip install qwen3-asr-mlx
 from qwen3_asr_mlx import Qwen3ASR
 
 model = Qwen3ASR.from_pretrained("mlx-community/Qwen3-ASR-1.7B-bf16")
-result = model.transcribe("audio.wav")
+result = model.transcribe(
+    "audio.wav",
+    context="Vocabulary: Quilter, apostle, gospel.",
+)
 print(result.text)      # "Hello, world."
 print(result.language)  # "English"
 print(result.duration)  # 3.2
 ```
 
 Model weights download automatically from HuggingFace Hub on first use.
+
+The 1.7B variant gives the best transcription quality and is the recommended
+default. For lower memory use and latency, load
+`mlx-community/Qwen3-ASR-0.6B-bf16` instead.
 
 ---
 
@@ -42,6 +50,7 @@ Model weights download automatically from HuggingFace Hub on first use.
 - **No PyTorch or transformers** dependency.
 - **Audio formats** via soundfile (WAV, FLAC, MP3, etc.)
 - **Automatic language detection** from model output.
+- **Context and hotwords** through Qwen3-ASR's official system-prompt format.
 - **Greedy and sampling-based decoding** with repetition penalty, top-k, and nucleus sampling.
 - **Thread-safe** with internal lock for concurrent callers.
 - **Long audio support** with automatic chunking at low-energy boundaries (up to 20 minutes).
@@ -69,6 +78,7 @@ Transcribe audio to text.
 |-----------|------|---------|-------------|
 | `audio` | `str`, `Path`, or `np.ndarray` | required | File path or float32 numpy array at 16 kHz mono |
 | `language` | `str` or `None` | `None` | Optional language hint (ISO 639-1 code or full name). `None` lets the model detect the language. |
+| `context` | `str` or `None` | `None` | Free-form context or hotwords, such as `Vocabulary: Quilter, apostle, gospel.` |
 | `temperature` | `float` | `0.0` | Sampling temperature; `0.0` = greedy |
 | `top_p` | `float` | `1.0` | Nucleus sampling threshold |
 | `top_k` | `int` | `0` | Top-k cutoff (`0` = disabled) |
@@ -128,6 +138,11 @@ TranscriptionResult { text, language, duration }
 - Python 3.10–3.13
 - MLX 0.31+
 
+The MLX conversion and this runtime are community maintained; they are not
+Qwen's official PyTorch/Transformers stack. The 1.7B model generally produces
+higher-quality transcripts, but needs more unified memory and has higher
+latency than the 0.6B model.
+
 ---
 
 ## Development
@@ -155,7 +170,14 @@ Skip model-loading tests with `-m "not slow"`.
 
 This package provides inference code only. It does not include model weights.
 
-The [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) model weights are developed by [Qwen Team, Alibaba Cloud](https://qwen.ai) and released under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The [bf16 MLX conversion](https://huggingface.co/mlx-community/Qwen3-ASR-1.7B-bf16) is hosted by [mlx-community](https://huggingface.co/mlx-community) under the same license. By downloading and using the model weights, you agree to the terms of the Apache 2.0 license.
+The [Qwen3-ASR](https://huggingface.co/collections/Qwen/qwen3-asr) model weights
+are developed by [Qwen Team, Alibaba Cloud](https://qwen.ai) and released under
+the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The
+[1.7B](https://huggingface.co/mlx-community/Qwen3-ASR-1.7B-bf16) and
+[0.6B](https://huggingface.co/mlx-community/Qwen3-ASR-0.6B-bf16) bf16 MLX
+conversions are hosted by [mlx-community](https://huggingface.co/mlx-community)
+under the same license. By downloading and using the model weights, you agree
+to the terms of the Apache 2.0 license.
 
 ### Trademarks
 

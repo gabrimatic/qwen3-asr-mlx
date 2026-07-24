@@ -3,9 +3,11 @@
 
 """Tests for the Qwen3-ASR tokenizer helpers."""
 
-import pytest
-
 from qwen3_asr_mlx.tokenizer import (
+    _PROMPT_PREFIX,
+    _PROMPT_SUFFIX,
+    _SYSTEM_PREFIX,
+    _SYSTEM_SUFFIX,
     ASR_TEXT_TOKEN_ID,
     AUDIO_END_TOKEN_ID,
     AUDIO_PAD_TOKEN_ID,
@@ -14,8 +16,6 @@ from qwen3_asr_mlx.tokenizer import (
     IM_END_TOKEN_ID,
     IM_START_TOKEN_ID,
     SPECIAL_TOKEN_TEXT,
-    _PROMPT_PREFIX,
-    _PROMPT_SUFFIX,
     build_prompt,
     parse_language_and_output,
     parse_output,
@@ -32,6 +32,23 @@ class TestBuildPrompt:
     def test_language_hint_tokens(self):
         ids = build_prompt(0, [220, 9707])
         assert ids == _PROMPT_PREFIX + _PROMPT_SUFFIX + [11528, 220, 9707, ASR_TEXT_TOKEN_ID]
+
+    def test_context_tokens_fill_system_message(self):
+        context = [42, 43, 44]
+        ids = build_prompt(0, context_tokens=context)
+        assert ids == _SYSTEM_PREFIX + context + _SYSTEM_SUFFIX + _PROMPT_SUFFIX
+
+    def test_context_and_language_can_be_combined(self):
+        context = [42, 43]
+        language = [220, 9707]
+        ids = build_prompt(0, language, context)
+        assert ids == (
+            _SYSTEM_PREFIX
+            + context
+            + _SYSTEM_SUFFIX
+            + _PROMPT_SUFFIX
+            + [11528, *language, ASR_TEXT_TOKEN_ID]
+        )
 
     def test_audio_tokens_present(self):
         n = 10
