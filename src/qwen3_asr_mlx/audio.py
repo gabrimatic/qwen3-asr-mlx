@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import struct
 from pathlib import Path
-from typing import Optional
 
 import mlx.core as mx
 import numpy as np
@@ -120,67 +120,71 @@ def _read_wav_pcm(path: str | Path) -> tuple[np.ndarray, int]:
     Falls back to soundfile on anything unusual.
     """
     path = Path(path)
-    try:
-        with open(path, "rb") as f:
-            riff = f.read(4)
-            if riff != b"RIFF":
-                raise ValueError("Not a RIFF file")
-            f.read(4)  # file size
-            wave = f.read(4)
-            if wave != b"WAVE":
-                raise ValueError("Not WAVE")
+    with open(path, "rb") as f:
+        riff = f.read(4)
+        if riff != b"RIFF":
+            raise ValueError("Not a RIFF file")
+        f.read(4)  # file size
+        wave = f.read(4)
+        if wave != b"WAVE":
+            raise ValueError("Not WAVE")
 
-            audio_format = channels = sample_rate = bits_per_sample = None
-            data_offset = data_size = None
+        audio_format = channels = sample_rate = bits_per_sample = None
+        data_offset = data_size = None
 
-            while True:
-                chunk_id = f.read(4)
-                if len(chunk_id) < 4:
-                    break
-                (chunk_size,) = struct.unpack("<I", f.read(4))
-                if chunk_id == b"fmt ":
-                    fmt = f.read(chunk_size)
-                    audio_format = struct.unpack_from("<H", fmt, 0)[0]
-                    channels = struct.unpack_from("<H", fmt, 2)[0]
-                    sample_rate = struct.unpack_from("<I", fmt, 4)[0]
-                    bits_per_sample = struct.unpack_from("<H", fmt, 14)[0]
-                elif chunk_id == b"data":
-                    data_offset = f.tell()
-                    data_size = chunk_size
-                    f.seek(chunk_size, 1)
-                else:
-                    f.seek(chunk_size, 1)
+        while True:
+            chunk_id = f.read(4)
+            if len(chunk_id) < 4:
+                break
+            (chunk_size,) = struct.unpack("<I", f.read(4))
+            # RIFF chunks are word aligned: odd sizes carry a pad byte
+            padded_size = chunk_size + (chunk_size & 1)
+            if chunk_id == b"fmt ":
+                fmt = f.read(chunk_size)
+                audio_format = struct.unpack_from("<H", fmt, 0)[0]
+                channels = struct.unpack_from("<H", fmt, 2)[0]
+                sample_rate = struct.unpack_from("<I", fmt, 4)[0]
+                bits_per_sample = struct.unpack_from("<H", fmt, 14)[0]
+                f.seek(padded_size - chunk_size, 1)
+                continue
+            if chunk_id == b"data":
+                data_offset = f.tell()
+                data_size = chunk_size
+            f.seek(padded_size, 1)
 
-            if data_offset is None or audio_format is None:
-                raise ValueError("Missing fmt or data chunk")
+        if (
+            data_offset is None
+            or data_size is None
+            or audio_format is None
+            or channels is None
+            or sample_rate is None
+            or bits_per_sample is None
+        ):
+            raise ValueError("Missing fmt or data chunk")
 
-            # audio_format: 1 = PCM, 3 = IEEE float
-            if audio_format not in (1, 3):
-                raise ValueError(f"Unsupported audio format: {audio_format}")
+        # audio_format: 1 = PCM, 3 = IEEE float
+        if audio_format not in (1, 3):
+            raise ValueError(f"Unsupported audio format: {audio_format}")
 
-            f.seek(data_offset)
-            raw = f.read(data_size)
+        f.seek(data_offset)
+        raw = f.read(data_size)
 
-        n_samples = data_size // (bits_per_sample // 8) // channels
+    n_samples = data_size // (bits_per_sample // 8) // channels
 
-        if audio_format == 1 and bits_per_sample == 16:
-            samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-        elif audio_format == 1 and bits_per_sample == 32:
-            samples = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
-        elif audio_format == 3 and bits_per_sample == 32:
-            samples = np.frombuffer(raw, dtype=np.float32).copy()
-        else:
-            raise ValueError(f"Unsupported PCM depth: {bits_per_sample}-bit")
+    if audio_format == 1 and bits_per_sample == 16:
+        samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    elif audio_format == 1 and bits_per_sample == 32:
+        samples = np.frombuffer(raw, dtype=np.int32).astype(np.float32) / 2147483648.0
+    elif audio_format == 3 and bits_per_sample == 32:
+        samples = np.frombuffer(raw, dtype=np.float32).copy()
+    else:
+        raise ValueError(f"Unsupported PCM depth: {bits_per_sample}-bit")
 
-        # Interleaved channels -> mono by averaging
-        if channels > 1:
-            samples = samples[: n_samples * channels].reshape(n_samples, channels).mean(axis=1)
+    # Interleaved channels -> mono by averaging
+    if channels > 1:
+        samples = samples[: n_samples * channels].reshape(n_samples, channels).mean(axis=1)
 
-        return samples.astype(np.float32), sample_rate
-
-    except Exception:
-        # Fall through to soundfile
-        raise
+    return samples.astype(np.float32), sample_rate
 
 
 def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> np.ndarray:
@@ -190,20 +194,20 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> np.ndarray:
     other formats.  Resamples with linear interpolation if needed.
     """
     path = Path(path)
-    samples: Optional[np.ndarray] = None
-    sr: Optional[int] = None
+    samples: np.ndarray | None = None
+    sr: int | None = None
 
     if path.suffix.lower() == ".wav":
-        try:
+        with contextlib.suppress(Exception):
             samples, sr = _read_wav_pcm(path)
-        except Exception:
-            pass
 
-    if samples is None:
+    if samples is None or sr is None:
         import soundfile as sf
+
         samples, sr = sf.read(str(path), dtype="float32", always_2d=False)
         if samples.ndim == 2:
             samples = samples.mean(axis=1)
+    assert samples is not None and sr is not None
 
     # Resample if necessary
     if sr != target_sr:

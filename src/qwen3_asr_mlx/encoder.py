@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Optional
+from typing import cast
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -65,7 +65,7 @@ class _MultiHeadSelfAttention(nn.Module):
     def __call__(
         self,
         x: mx.array,
-        mask: Optional[mx.array] = None,
+        mask: mx.array | None = None,
     ) -> mx.array:
         B, T, _ = x.shape
         H = self.num_heads
@@ -106,7 +106,7 @@ class EncoderLayer(nn.Module):
     def __call__(
         self,
         x: mx.array,
-        mask: Optional[mx.array] = None,
+        mask: mx.array | None = None,
     ) -> mx.array:
         residual = x
         x = self.self_attn_layer_norm(x)
@@ -209,7 +209,7 @@ class AudioEncoder(nn.Module):
     @staticmethod
     def _block_attention_mask(
         seq_len: int, cu_seqlens: list[int],
-    ) -> Optional[mx.array]:
+    ) -> mx.array | None:
         """Build an additive block-diagonal attention mask.
 
         Each block defined by consecutive entries in *cu_seqlens* can attend
@@ -344,7 +344,7 @@ def load_encoder_weights(model: AudioEncoder, model_path: str | Path) -> None:
         path = Path(snapshot_download(repo_id=str(model_path)))
 
     weights_file = path / "model.safetensors"
-    raw: dict[str, mx.array] = mx.load(str(weights_file))
+    raw = cast(dict[str, mx.array], mx.load(str(weights_file)))
 
     prefix = "audio_tower."
     # Strip prefix and keep only audio_tower weights

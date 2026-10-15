@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from qwen3_asr_mlx.config import AudioEncoderConfig
-from qwen3_asr_mlx.encoder import AudioEncoder, EncoderLayer, SinusoidalPositionEmbedding, load_encoder_weights
+from qwen3_asr_mlx.encoder import AudioEncoder, SinusoidalPositionEmbedding, load_encoder_weights
 
 MODEL_PATH = Path(
     "/Users/soroush/.cache/huggingface/hub"

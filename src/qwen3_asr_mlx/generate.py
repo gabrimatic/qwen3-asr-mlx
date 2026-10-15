@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import cast
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -169,7 +169,7 @@ def sample(
     top_p: float = 1.0,
     top_k: int = 0,
     repetition_penalty: float = 1.0,
-    recent_tokens: Optional[list[int]] = None,
+    recent_tokens: list[int] | None = None,
 ) -> int:
     """Sample a token ID from a logit distribution.
 
@@ -201,7 +201,7 @@ def sample(
         logits = _apply_repetition_penalty(logits, recent_tokens, repetition_penalty)
 
     if temperature == 0.0:
-        return int(mx.argmax(logits).item())
+        return int(cast(int, mx.argmax(logits).item()))
 
     logits = logits / temperature
 
@@ -212,7 +212,7 @@ def sample(
         logits = _top_p_filter(logits, top_p)
 
     # mx.random.categorical takes unnormalized logits directly
-    return int(mx.random.categorical(logits[None]).item())
+    return int(cast(int, mx.random.categorical(logits[None]).item()))
 
 
 # ---------------------------------------------------------------------------

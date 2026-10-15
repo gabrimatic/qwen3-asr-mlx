@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import cast
 
 import mlx.core as mx
 import mlx.nn as nn
@@ -128,7 +128,7 @@ class Attention(nn.Module):
     def __call__(
         self,
         x: mx.array,
-        cache: Optional[KVCache],
+        cache: KVCache | None,
         layer_idx: int,
     ) -> mx.array:
         B, T, _ = x.shape
@@ -182,7 +182,7 @@ class DecoderLayer(nn.Module):
     def __call__(
         self,
         x: mx.array,
-        cache: Optional[KVCache],
+        cache: KVCache | None,
         layer_idx: int,
     ) -> mx.array:
         residual = x
@@ -219,7 +219,7 @@ class TextDecoder(nn.Module):
     def __call__(
         self,
         inputs: mx.array,
-        cache: Optional[KVCache] = None,
+        cache: KVCache | None = None,
         is_embeds: bool = False,
     ) -> mx.array:
         """Forward pass through the decoder.
@@ -240,10 +240,7 @@ class TextDecoder(nn.Module):
         mx.array
             Logits of shape ``(B, T, vocab_size)``.
         """
-        if is_embeds:
-            h = inputs
-        else:
-            h = self.embed_tokens(inputs)
+        h = inputs if is_embeds else self.embed_tokens(inputs)
 
         for i, layer in enumerate(self.layers):
             h = layer(h, cache, layer_idx=i)
@@ -277,7 +274,7 @@ def load_decoder_weights(decoder: TextDecoder, model_path: str | Path) -> None:
         path = Path(snapshot_download(repo_id=str(model_path)))
 
     weights_file = path / "model.safetensors"
-    raw: dict[str, mx.array] = mx.load(str(weights_file))
+    raw = cast(dict[str, mx.array], mx.load(str(weights_file)))
 
     prefix = "model."
     mapped: list[tuple[str, mx.array]] = []

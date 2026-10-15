@@ -8,14 +8,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import mlx.core as mx
-import mlx.nn as nn
 import numpy as np
 import pytest
 
-from qwen3_asr_mlx.config import TextDecoderConfig
-from qwen3_asr_mlx.decoder import KVCache, TextDecoder, load_decoder_weights
+from qwen3_asr_mlx.config import AudioEncoderConfig, TextDecoderConfig
+from qwen3_asr_mlx.decoder import TextDecoder, load_decoder_weights
 from qwen3_asr_mlx.encoder import AudioEncoder, load_encoder_weights
-from qwen3_asr_mlx.config import AudioEncoderConfig
 from qwen3_asr_mlx.generate import (
     _apply_repetition_penalty,
     _top_k_filter,
@@ -26,8 +24,6 @@ from qwen3_asr_mlx.generate import (
 )
 from qwen3_asr_mlx.tokenizer import (
     AUDIO_PAD_TOKEN_ID,
-    EOS_TOKEN_IDS,
-    IM_END_TOKEN_ID,
     build_prompt,
 )
 

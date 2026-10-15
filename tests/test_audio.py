@@ -8,7 +8,6 @@ import pytest
 
 from qwen3_asr_mlx.audio import (
     N_FFT,
-    HOP_LENGTH,
     N_MELS,
     SAMPLE_RATE,
     _get_mel_filterbank,

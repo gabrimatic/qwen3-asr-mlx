@@ -29,7 +29,7 @@ class AudioEncoderConfig:
     downsample_hidden_size: int = 480
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "AudioEncoderConfig":
+    def from_dict(cls, d: dict[str, Any]) -> AudioEncoderConfig:
         thinker_cfg = d.get("thinker_config", {})
         audio_cfg = (
             d.get("audio_encoder_config")
@@ -83,7 +83,7 @@ class TextDecoderConfig:
     rope_interleaved: bool = True
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "TextDecoderConfig":
+    def from_dict(cls, d: dict[str, Any]) -> TextDecoderConfig:
         thinker_cfg = d.get("thinker_config", {})
         text_cfg = (
             d.get("text_decoder_config")
@@ -130,7 +130,7 @@ class ModelConfig:
     support_languages: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ModelConfig":
+    def from_dict(cls, d: dict[str, Any]) -> ModelConfig:
         thinker_cfg = d.get("thinker_config", {})
         audio_source = (
             d.get("audio_encoder_config")
@@ -166,7 +166,7 @@ class ModelConfig:
         )
 
     @classmethod
-    def from_pretrained(cls, model_path: str | Path) -> "ModelConfig":
+    def from_pretrained(cls, model_path: str | Path) -> ModelConfig:
         """Load config from a local directory or HuggingFace Hub model ID.
 
         If *model_path* is an existing directory, ``config.json`` is read
@@ -180,9 +180,7 @@ class ModelConfig:
         else:
             from huggingface_hub import hf_hub_download
 
-            config_file = hf_hub_download(
-                repo_id=str(model_path), filename="config.json"
-            )
-            d = json.loads(Path(config_file).read_text(encoding="utf-8"))
+            downloaded = hf_hub_download(repo_id=str(model_path), filename="config.json")
+            d = json.loads(Path(downloaded).read_text(encoding="utf-8"))
 
         return cls.from_dict(d)

@@ -15,9 +15,7 @@ import pytest
 from qwen3_asr_mlx.config import TextDecoderConfig
 from qwen3_asr_mlx.decoder import (
     Attention,
-    DecoderLayer,
     KVCache,
-    MLP,
     TextDecoder,
     load_decoder_weights,
 )

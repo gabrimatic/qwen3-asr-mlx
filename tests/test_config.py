@@ -7,10 +7,7 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from qwen3_asr_mlx.config import AudioEncoderConfig, ModelConfig, TextDecoderConfig
-
 
 # Minimal config.json that mirrors the Qwen3-ASR-1.7B layout
 _SAMPLE_CONFIG: dict = {

@@ -81,7 +81,7 @@ class TestBuildPrompt:
             198,     # \n
             151669,  # <|audio_start|>
         ]
-        assert _PROMPT_PREFIX == expected_prefix
+        assert expected_prefix == _PROMPT_PREFIX
 
     def test_exact_suffix_values(self):
         """Verify the exact hardcoded suffix matches the Qwen3-ASR spec."""
@@ -93,7 +93,7 @@ class TestBuildPrompt:
             77091,   # assistant
             198,     # \n
         ]
-        assert _PROMPT_SUFFIX == expected_suffix
+        assert expected_suffix == _PROMPT_SUFFIX
 
     def test_total_length(self):
         n = 7

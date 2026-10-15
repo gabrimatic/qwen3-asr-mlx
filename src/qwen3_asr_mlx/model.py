@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import mlx.core as mx
 import numpy as np
@@ -153,7 +153,7 @@ class Qwen3ASR:
         cls,
         model_id_or_path: str | Path,
         **kwargs,
-    ) -> "Qwen3ASR":
+    ) -> Qwen3ASR:
         """Load a Qwen3-ASR model from a local directory or HuggingFace Hub.
 
         Parameters
@@ -194,15 +194,15 @@ class Qwen3ASR:
     def transcribe(
         self,
         audio: str | Path | np.ndarray,
-        language: Optional[str] = None,
+        language: str | None = None,
         temperature: float = 0.0,
         top_p: float = 1.0,
         top_k: int = 0,
         repetition_penalty: float = 1.2,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         repetition_context_size: int = 100,
         chunk_duration: float = 1200.0,
-        context: Optional[str] = None,
+        context: str | None = None,
     ) -> TranscriptionResult:
         """Transcribe audio to text.
 
@@ -273,12 +273,10 @@ class Qwen3ASR:
         self._encoder = None  # type: ignore[assignment]
         self._decoder = None  # type: ignore[assignment]
         gc.collect()
-        try:
+        with contextlib.suppress(Exception):
             mx.clear_cache()
-        except Exception:
-            pass
 
-    def __enter__(self) -> "Qwen3ASR":
+    def __enter__(self) -> Qwen3ASR:
         return self
 
     def __exit__(self, *args) -> None:
@@ -291,13 +289,13 @@ class Qwen3ASR:
     def _transcribe_impl(
         self,
         audio: str | Path | np.ndarray,
-        language: Optional[str],
-        context: Optional[str],
+        language: str | None,
+        context: str | None,
         temperature: float,
         top_p: float,
         top_k: int,
         repetition_penalty: float,
-        max_tokens: Optional[int],
+        max_tokens: int | None,
         repetition_context_size: int,
         chunk_duration: float,
     ) -> TranscriptionResult:
@@ -369,7 +367,7 @@ class Qwen3ASR:
 
         return TranscriptionResult(text=text, language=detected_language, duration=duration)
 
-    def _resolve_language(self, language: Optional[str]) -> Optional[str]:
+    def _resolve_language(self, language: str | None) -> str | None:
         """Map user-provided language hint to a full language name.
 
         Returns ``None`` when no hint is given so the model can auto-detect.
@@ -389,7 +387,7 @@ class Qwen3ASR:
     def _decode_tokens(
         self,
         tokens: list[int],
-        prompted_language: Optional[str],
+        prompted_language: str | None,
     ) -> tuple[str, str]:
         """Decode generated tokens into ``(text, language)``.
 
@@ -416,8 +414,8 @@ class Qwen3ASR:
         self,
         samples: np.ndarray,
         duration: float,
-        language: Optional[str],
-        context: Optional[str],
+        language: str | None,
+        context: str | None,
         temperature: float,
         top_p: float,
         top_k: int,
