@@ -21,4 +21,4 @@
 - [ ] All tests pass (`python -m pytest tests/ -v`)
 - [ ] README updated (if behavior changed)
 - [ ] No PyTorch or transformers dependencies introduced
-- [ ] Existing code style maintained
+- [ ] `ruff check`, `ruff format --check` and `mypy` pass
