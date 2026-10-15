@@ -17,6 +17,7 @@ from .config import TextDecoderConfig
 # KV Cache
 # ---------------------------------------------------------------------------
 
+
 class KVCache:
     """Per-layer key/value cache for autoregressive decoding.
 
@@ -55,18 +56,15 @@ class KVCache:
             self.keys.append(key)
             self.values.append(value)
         else:
-            self.keys[layer_idx] = mx.concatenate(
-                [self.keys[layer_idx], key], axis=2
-            )
-            self.values[layer_idx] = mx.concatenate(
-                [self.values[layer_idx], value], axis=2
-            )
+            self.keys[layer_idx] = mx.concatenate([self.keys[layer_idx], key], axis=2)
+            self.values[layer_idx] = mx.concatenate([self.values[layer_idx], value], axis=2)
         return self.keys[layer_idx], self.values[layer_idx]
 
 
 # ---------------------------------------------------------------------------
 # Causal mask
 # ---------------------------------------------------------------------------
+
 
 def create_additive_causal_mask(N: int, offset: int = 0) -> mx.array:
     """Create an additive causal attention mask.
@@ -84,13 +82,14 @@ def create_additive_causal_mask(N: int, offset: int = 0) -> mx.array:
 # MLP (SwiGLU)
 # ---------------------------------------------------------------------------
 
+
 class MLP(nn.Module):
     """SwiGLU feed-forward network."""
 
     def __init__(self, config: TextDecoderConfig) -> None:
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj   = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def __call__(self, x: mx.array) -> mx.array:
@@ -100,6 +99,7 @@ class MLP(nn.Module):
 # ---------------------------------------------------------------------------
 # Attention
 # ---------------------------------------------------------------------------
+
 
 class Attention(nn.Module):
     """Grouped-query attention with QK-norm and RoPE.
@@ -111,15 +111,15 @@ class Attention(nn.Module):
 
     def __init__(self, config: TextDecoderConfig) -> None:
         super().__init__()
-        self.n_heads    = config.num_attention_heads   # 16
-        self.n_kv_heads = config.num_key_value_heads   # 8
-        self.head_dim   = config.head_dim              # 128
-        self.scale      = self.head_dim ** -0.5
+        self.n_heads = config.num_attention_heads  # 16
+        self.n_kv_heads = config.num_key_value_heads  # 8
+        self.head_dim = config.head_dim  # 128
+        self.scale = self.head_dim**-0.5
 
-        self.q_proj = nn.Linear(config.hidden_size, self.n_heads * self.head_dim,    bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, self.n_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.n_kv_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.n_kv_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.n_heads * self.head_dim, config.hidden_size,    bias=False)
+        self.o_proj = nn.Linear(self.n_heads * self.head_dim, config.hidden_size, bias=False)
 
         self.q_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -137,7 +137,7 @@ class Attention(nn.Module):
         k = self.k_proj(x)
         v = self.v_proj(x)
 
-        q = q.reshape(B, T, self.n_heads,    self.head_dim)
+        q = q.reshape(B, T, self.n_heads, self.head_dim)
         k = k.reshape(B, T, self.n_kv_heads, self.head_dim)
         v = v.reshape(B, T, self.n_kv_heads, self.head_dim)
 
@@ -157,9 +157,7 @@ class Attention(nn.Module):
 
         mask = create_additive_causal_mask(T, offset=offset).astype(q.dtype)
 
-        out = mx.fast.scaled_dot_product_attention(
-            q, k, v, scale=self.scale, mask=mask
-        )
+        out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale, mask=mask)
         out = out.transpose(0, 2, 1, 3).reshape(B, T, self.n_heads * self.head_dim)
 
         return self.o_proj(out)
@@ -169,15 +167,16 @@ class Attention(nn.Module):
 # Decoder layer
 # ---------------------------------------------------------------------------
 
+
 class DecoderLayer(nn.Module):
     """Single pre-norm Qwen3 decoder layer."""
 
     def __init__(self, config: TextDecoderConfig) -> None:
         super().__init__()
-        self.input_layernorm        = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn              = Attention(config)
+        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Attention(config)
         self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp                    = MLP(config)
+        self.mlp = MLP(config)
 
     def __call__(
         self,
@@ -200,6 +199,7 @@ class DecoderLayer(nn.Module):
 # Text decoder
 # ---------------------------------------------------------------------------
 
+
 class TextDecoder(nn.Module):
     """Qwen3 text decoder with tied lm_head.
 
@@ -214,7 +214,7 @@ class TextDecoder(nn.Module):
         self.config = config
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = [DecoderLayer(config) for _ in range(config.num_hidden_layers)]
-        self.norm   = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def __call__(
         self,
@@ -254,6 +254,7 @@ class TextDecoder(nn.Module):
 # Weight loading
 # ---------------------------------------------------------------------------
 
+
 def load_decoder_weights(decoder: TextDecoder, model_path: str | Path) -> None:
     """Load decoder weights from safetensors.
 
@@ -271,6 +272,7 @@ def load_decoder_weights(decoder: TextDecoder, model_path: str | Path) -> None:
     path = Path(model_path)
     if not path.is_dir():
         from huggingface_hub import snapshot_download
+
         path = Path(snapshot_download(repo_id=str(model_path)))
 
     weights_file = path / "model.safetensors"
@@ -281,7 +283,7 @@ def load_decoder_weights(decoder: TextDecoder, model_path: str | Path) -> None:
     for key, value in raw.items():
         if not key.startswith(prefix):
             continue
-        local_key = key[len(prefix):]
+        local_key = key[len(prefix) :]
         mapped.append((local_key, value))
 
     decoder.load_weights(mapped)

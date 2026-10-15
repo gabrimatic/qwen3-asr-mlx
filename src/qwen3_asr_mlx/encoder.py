@@ -18,6 +18,7 @@ from .config import AudioEncoderConfig
 # Sinusoidal positional embeddings
 # ---------------------------------------------------------------------------
 
+
 class SinusoidalPositionEmbedding(nn.Module):
     """Precomputed sinusoidal position embeddings.
 
@@ -30,14 +31,10 @@ class SinusoidalPositionEmbedding(nn.Module):
         super().__init__()
         half = d_model // 2
         log_timescale = math.log(10000.0) / (half - 1)
-        inv_timescales = mx.exp(
-            -mx.arange(half, dtype=mx.float32) * log_timescale
-        )
+        inv_timescales = mx.exp(-mx.arange(half, dtype=mx.float32) * log_timescale)
         positions = mx.arange(max_positions, dtype=mx.float32)[:, None]
         scaled = positions * inv_timescales[None, :]
-        self._positional_embedding = mx.concatenate(
-            [mx.sin(scaled), mx.cos(scaled)], axis=1
-        )
+        self._positional_embedding = mx.concatenate([mx.sin(scaled), mx.cos(scaled)], axis=1)
 
     def __call__(self, seqlen: int) -> mx.array:
         """Return shape (seqlen, d_model)."""
@@ -48,6 +45,7 @@ class SinusoidalPositionEmbedding(nn.Module):
 # Multi-head self-attention
 # ---------------------------------------------------------------------------
 
+
 class _MultiHeadSelfAttention(nn.Module):
     """Standard multi-head self-attention (no GQA) with optional block mask."""
 
@@ -55,7 +53,7 @@ class _MultiHeadSelfAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Linear(d_model, d_model)
@@ -79,9 +77,7 @@ class _MultiHeadSelfAttention(nn.Module):
         k = k.reshape(B, T, H, D).transpose(0, 2, 1, 3)
         v = v.reshape(B, T, H, D).transpose(0, 2, 1, 3)
 
-        out = mx.fast.scaled_dot_product_attention(
-            q, k, v, scale=self.scale, mask=mask
-        )
+        out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale, mask=mask)
         out = out.transpose(0, 2, 1, 3).reshape(B, T, H * D)
         return self.out_proj(out)
 
@@ -90,15 +86,14 @@ class _MultiHeadSelfAttention(nn.Module):
 # Encoder transformer layer
 # ---------------------------------------------------------------------------
 
+
 class EncoderLayer(nn.Module):
     """Single Whisper-style encoder transformer layer (pre-norm residual)."""
 
     def __init__(self, config: AudioEncoderConfig) -> None:
         super().__init__()
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model)
-        self.self_attn = _MultiHeadSelfAttention(
-            config.d_model, config.encoder_attention_heads
-        )
+        self.self_attn = _MultiHeadSelfAttention(config.d_model, config.encoder_attention_heads)
         self.final_layer_norm = nn.LayerNorm(config.d_model)
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, config.d_model)
@@ -125,6 +120,7 @@ class EncoderLayer(nn.Module):
 # ---------------------------------------------------------------------------
 # Audio encoder
 # ---------------------------------------------------------------------------
+
 
 class AudioEncoder(nn.Module):
     """Qwen3-ASR audio encoder.
@@ -168,9 +164,7 @@ class AudioEncoder(nn.Module):
         )
 
         # Linear projection from flattened freq x channel to d_model (no bias)
-        freq_after_conv = (
-            ((((config.num_mel_bins + 1) // 2) + 1) // 2 + 1) // 2
-        )
+        freq_after_conv = ((((config.num_mel_bins + 1) // 2) + 1) // 2 + 1) // 2
         self.conv_out = nn.Linear(
             config.downsample_hidden_size * freq_after_conv,
             config.d_model,
@@ -178,9 +172,7 @@ class AudioEncoder(nn.Module):
         )
 
         # Precomputed sinusoidal positional embeddings (per-chunk, not global)
-        self.positional_embedding = SinusoidalPositionEmbedding(
-            config.max_source_positions, config.d_model
-        )
+        self.positional_embedding = SinusoidalPositionEmbedding(config.max_source_positions, config.d_model)
 
         # Transformer layers
         self.layers = [EncoderLayer(config) for _ in range(config.encoder_layers)]
@@ -208,7 +200,8 @@ class AudioEncoder(nn.Module):
 
     @staticmethod
     def _block_attention_mask(
-        seq_len: int, cu_seqlens: list[int],
+        seq_len: int,
+        cu_seqlens: list[int],
     ) -> mx.array | None:
         """Build an additive block-diagonal attention mask.
 
@@ -260,9 +253,7 @@ class AudioEncoder(nn.Module):
             real_len = segment.shape[1]
             chunk_real_lengths.append(real_len)
             if real_len < chunk_size:
-                pad = mx.zeros(
-                    (n_mels, chunk_size - real_len), dtype=segment.dtype
-                )
+                pad = mx.zeros((n_mels, chunk_size - real_len), dtype=segment.dtype)
                 segment = mx.concatenate([segment, pad], axis=1)
             chunk_mels.append(segment)
             offset += chunk_size
@@ -286,18 +277,14 @@ class AudioEncoder(nn.Module):
         x = x + pe[None, :, :]  # broadcast across all chunks
 
         # ------ strip padding tokens, keep only valid frames per chunk ------
-        valid_lengths = [
-            self._conv_output_length(rl) for rl in chunk_real_lengths
-        ]
-        hidden_list = [x[i, :valid_lengths[i]] for i in range(len(chunk_mels))]
+        valid_lengths = [self._conv_output_length(rl) for rl in chunk_real_lengths]
+        hidden_list = [x[i, : valid_lengths[i]] for i in range(len(chunk_mels))]
         hidden = mx.concatenate(hidden_list, axis=0)  # (total_tokens, d_model)
 
         # ------ block attention mask ------
         # Window size in tokens: tokens_per_full_chunk * (n_window_infer / chunk_size)
         total_tokens = hidden.shape[0]
-        window_tokens = tokens_per_chunk * (
-            self.config.n_window_infer // chunk_size
-        )
+        window_tokens = tokens_per_chunk * (self.config.n_window_infer // chunk_size)
 
         # Build cumulative sequence lengths: fixed-size contiguous blocks
         cu_seqlens = [0]
@@ -327,6 +314,7 @@ class AudioEncoder(nn.Module):
 # Weight loading
 # ---------------------------------------------------------------------------
 
+
 def load_encoder_weights(model: AudioEncoder, model_path: str | Path) -> None:
     """Load audio encoder weights from a safetensors model file.
 
@@ -341,6 +329,7 @@ def load_encoder_weights(model: AudioEncoder, model_path: str | Path) -> None:
     path = Path(model_path)
     if not path.is_dir():
         from huggingface_hub import snapshot_download
+
         path = Path(snapshot_download(repo_id=str(model_path)))
 
     weights_file = path / "model.safetensors"
@@ -352,7 +341,7 @@ def load_encoder_weights(model: AudioEncoder, model_path: str | Path) -> None:
     for key, value in raw.items():
         if not key.startswith(prefix):
             continue
-        local_key = key[len(prefix):]
+        local_key = key[len(prefix) :]
         mapped.append((local_key, value))
 
     model.load_weights(mapped)

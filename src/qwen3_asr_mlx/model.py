@@ -100,6 +100,7 @@ LANGUAGE_MAP: dict[str, str] = {
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TranscriptionResult:
     """Result of a transcription call."""
@@ -117,6 +118,7 @@ class TranscriptionResult:
 # ---------------------------------------------------------------------------
 # Model
 # ---------------------------------------------------------------------------
+
 
 class Qwen3ASR:
     """Qwen3-ASR speech-to-text model for Apple Silicon.
@@ -171,9 +173,7 @@ class Qwen3ASR:
         if not path.is_dir():
             from huggingface_hub import snapshot_download
 
-            path = Path(
-                snapshot_download(repo_id=str(model_id_or_path), **kwargs)
-            )
+            path = Path(snapshot_download(repo_id=str(model_id_or_path), **kwargs))
 
         config = ModelConfig.from_pretrained(path)
 
@@ -305,9 +305,7 @@ class Qwen3ASR:
         else:
             samples = np.asarray(audio, dtype=np.float32)
             if samples.ndim != 1:
-                raise ValueError(
-                    f"Audio array must be 1-D (mono), got shape {samples.shape}"
-                )
+                raise ValueError(f"Audio array must be 1-D (mono), got shape {samples.shape}")
 
         if len(samples) == 0:
             return TranscriptionResult(text="", language="Unknown", duration=0.0)
@@ -487,6 +485,7 @@ class Qwen3ASR:
 # Chunking helper
 # ---------------------------------------------------------------------------
 
+
 def _find_split_points(
     samples: np.ndarray,
     chunk_samples: int,
@@ -523,10 +522,7 @@ def _find_split_points(
         return []
 
     energy = np.array(
-        [
-            np.sqrt(np.mean(samples[i * frame_samples: (i + 1) * frame_samples] ** 2))
-            for i in range(n_frames)
-        ],
+        [np.sqrt(np.mean(samples[i * frame_samples : (i + 1) * frame_samples] ** 2)) for i in range(n_frames)],
         dtype=np.float32,
     )
 
@@ -541,7 +537,7 @@ def _find_split_points(
         if lo_frame >= hi_frame:
             split_points.append(boundary)
         else:
-            best_frame = int(np.argmin(energy[lo_frame: hi_frame + 1])) + lo_frame
+            best_frame = int(np.argmin(energy[lo_frame : hi_frame + 1])) + lo_frame
             split_points.append(best_frame * frame_samples)
 
         boundary += chunk_samples

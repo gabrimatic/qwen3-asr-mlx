@@ -36,16 +36,16 @@ SPECIAL_TOKEN_TEXT: dict[int, str] = {
 # message, between _SYSTEM_PREFIX and _SYSTEM_SUFFIX.
 _SYSTEM_PREFIX: list[int] = [
     IM_START_TOKEN_ID,  # <|im_start|>
-    8948,               # "system"
-    198,                # "\n"
+    8948,  # "system"
+    198,  # "\n"
 ]
 
 _SYSTEM_SUFFIX: list[int] = [
-    IM_END_TOKEN_ID,    # <|im_end|>
-    198,                # "\n"
+    IM_END_TOKEN_ID,  # <|im_end|>
+    198,  # "\n"
     IM_START_TOKEN_ID,  # <|im_start|>
-    872,                # "user"
-    198,                # "\n"
+    872,  # "user"
+    198,  # "\n"
     AUDIO_START_TOKEN_ID,  # <|audio_start|>
 ]
 
@@ -55,11 +55,11 @@ _PROMPT_PREFIX: list[int] = _SYSTEM_PREFIX + _SYSTEM_SUFFIX
 
 _PROMPT_SUFFIX: list[int] = [
     AUDIO_END_TOKEN_ID,  # <|audio_end|>
-    IM_END_TOKEN_ID,     # <|im_end|>
-    198,                 # "\n"
-    IM_START_TOKEN_ID,   # <|im_start|>
-    77091,               # "assistant"
-    198,                 # "\n"
+    IM_END_TOKEN_ID,  # <|im_end|>
+    198,  # "\n"
+    IM_START_TOKEN_ID,  # <|im_start|>
+    77091,  # "assistant"
+    198,  # "\n"
 ]
 
 # Token ID for "language" (single BPE token in Qwen3-ASR vocabulary)
@@ -69,6 +69,7 @@ _LANGUAGE_TOKEN_ID: int = 11528
 # ---------------------------------------------------------------------------
 # Public helpers (usable without a Tokenizer instance)
 # ---------------------------------------------------------------------------
+
 
 def build_prompt(
     n_audio_tokens: int,
@@ -147,6 +148,7 @@ def parse_language_and_output(text: str, default_language: str = "English") -> t
 # Tokenizer class
 # ---------------------------------------------------------------------------
 
+
 class Tokenizer:
     """Thin wrapper around HuggingFace tokenizers for Qwen3-ASR.
 
@@ -182,9 +184,7 @@ class Tokenizer:
             self._tok.pre_tokenizer = ByteLevel(add_prefix_space=False)
             self._tok.decoder = ByteLevelDecoder()
         else:
-            raise FileNotFoundError(
-                f"No tokenizer.json or vocab.json+merges.txt found in {model_path}"
-            )
+            raise FileNotFoundError(f"No tokenizer.json or vocab.json+merges.txt found in {model_path}")
 
     # ------------------------------------------------------------------
 

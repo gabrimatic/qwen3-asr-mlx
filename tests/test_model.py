@@ -41,6 +41,7 @@ def _tone(freq_hz: float = 440.0, duration_s: float = 1.0, sr: int = 16_000) -> 
 # TranscriptionResult
 # ---------------------------------------------------------------------------
 
+
 class TestTranscriptionResult:
     def test_fields_accessible(self):
         r = TranscriptionResult(text="hello", language="English", duration=1.5)
@@ -64,6 +65,7 @@ class TestTranscriptionResult:
 # Language map
 # ---------------------------------------------------------------------------
 
+
 class TestLanguageMap:
     def test_common_codes_present(self):
         for code in ("en", "zh", "ja", "ko", "de", "fr", "es"):
@@ -79,6 +81,7 @@ class TestLanguageMap:
 # ---------------------------------------------------------------------------
 # Chunking helper
 # ---------------------------------------------------------------------------
+
 
 class TestFindSplitPoints:
     def test_no_split_for_short_audio(self):
@@ -108,7 +111,7 @@ class TestFindSplitPoints:
         search = sr * 5
         # 25 s audio; silent from 9–11 s (boundary at 10 s)
         samples = np.ones(sr * 25, dtype=np.float32) * 0.5
-        samples[sr * 9: sr * 11] = 0.0  # silent region
+        samples[sr * 9 : sr * 11] = 0.0  # silent region
 
         points = _find_split_points(samples, chunk_samples=chunk, search_samples=search)
         assert len(points) >= 1
@@ -125,6 +128,7 @@ class TestFindSplitPoints:
 # ---------------------------------------------------------------------------
 # Output decoding helper
 # ---------------------------------------------------------------------------
+
 
 class TestDecodeOutput:
     """Tests for the internal _decode_output method via a minimal stub."""
@@ -184,14 +188,18 @@ class TestDecodeOutput:
 # max_tokens auto-computation
 # ---------------------------------------------------------------------------
 
+
 class TestMaxTokensComputation:
     """Verify the auto-computation formula without loading the real model."""
 
-    @pytest.mark.parametrize("duration,expected_min", [
-        (1.0, 256),    # short clip → floor of 256
-        (10.0, 500),   # 10 s × 50 = 500
-        (60.0, 3000),  # 60 s × 50 = 3000
-    ])
+    @pytest.mark.parametrize(
+        "duration,expected_min",
+        [
+            (1.0, 256),  # short clip → floor of 256
+            (10.0, 500),  # 10 s × 50 = 500
+            (60.0, 3000),  # 60 s × 50 = 3000
+        ],
+    )
     def test_auto_max_tokens(self, duration, expected_min):
         computed = max(256, int(duration * 50))
         assert computed == expected_min
@@ -234,6 +242,7 @@ class TestContextPrompt:
 # ---------------------------------------------------------------------------
 # Real model tests (marked slow)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 class TestFromPretrained:

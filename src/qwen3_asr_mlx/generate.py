@@ -17,6 +17,7 @@ from .tokenizer import AUDIO_PAD_TOKEN_ID, EOS_TOKEN_IDS
 # Embedding preparation
 # ---------------------------------------------------------------------------
 
+
 def prepare_inputs(
     encoder_output: mx.array,
     input_ids: list[int],
@@ -56,10 +57,7 @@ def prepare_inputs(
         return embeddings
 
     if n_audio != n_encoder:
-        raise ValueError(
-            f"Number of audio-pad tokens ({n_audio}) does not match "
-            f"encoder output length ({n_encoder})."
-        )
+        raise ValueError(f"Number of audio-pad tokens ({n_audio}) does not match encoder output length ({n_encoder}).")
 
     T = embeddings.shape[1]
     H = embeddings.shape[2]
@@ -68,14 +66,10 @@ def prepare_inputs(
     # correct sequence positions, then select with a boolean mask.
     audio_full = mx.zeros((1, T, H), dtype=embeddings.dtype)
     for i, pos in enumerate(audio_positions):
-        audio_full = audio_full.at[0:1, pos : pos + 1, :].add(
-            encoder_output[0:1, i : i + 1, :]
-        )
+        audio_full = audio_full.at[0:1, pos : pos + 1, :].add(encoder_output[0:1, i : i + 1, :])
 
     # Boolean mask: True at audio-pad positions
-    audio_mask_1d = mx.array(
-        [pos in set(audio_positions) for pos in range(T)], dtype=mx.bool_
-    )
+    audio_mask_1d = mx.array([pos in set(audio_positions) for pos in range(T)], dtype=mx.bool_)
     audio_mask = audio_mask_1d[None, :, None]  # (1, T, 1) → broadcasts over H
 
     return mx.where(audio_mask, audio_full, embeddings)
@@ -84,6 +78,7 @@ def prepare_inputs(
 # ---------------------------------------------------------------------------
 # Sampling utilities
 # ---------------------------------------------------------------------------
+
 
 def _apply_repetition_penalty(
     logits: mx.array,
@@ -149,8 +144,8 @@ def _top_p_filter(logits: mx.array, top_p: float) -> mx.array:
     probs = mx.softmax(logits, axis=-1)
     # Sort probabilities descending
     sorted_indices = mx.argsort(-probs)
-    sorted_probs   = probs[sorted_indices]
-    cumsum         = mx.cumsum(sorted_probs, axis=-1)
+    sorted_probs = probs[sorted_indices]
+    cumsum = mx.cumsum(sorted_probs, axis=-1)
 
     # Keep tokens where cumulative prob (shifted by one) is < top_p
     # i.e. remove the smallest tokens that push cumsum over top_p
@@ -218,6 +213,7 @@ def sample(
 # ---------------------------------------------------------------------------
 # Generation loop
 # ---------------------------------------------------------------------------
+
 
 def generate(
     decoder: TextDecoder,
@@ -297,11 +293,7 @@ def generate(
 
         cache.offset += 1
 
-        recent = (
-            output_tokens[-repetition_context_size:]
-            if repetition_context_size > 0
-            else None
-        )
+        recent = output_tokens[-repetition_context_size:] if repetition_context_size > 0 else None
         next_token = sample(
             logits[:, -1, :],
             temperature=temperature,

@@ -56,6 +56,7 @@ def _make_tiny_decoder() -> TextDecoder:
 # prepare_inputs
 # ---------------------------------------------------------------------------
 
+
 class TestPrepareInputs:
     def test_no_audio_pad_returns_text_embeddings(self):
         """With no audio-pad tokens the embeddings are just text embeddings."""
@@ -85,9 +86,7 @@ class TestPrepareInputs:
         assert out.shape == (1, 4, config.hidden_size)
         # Positions 1 and 2 should equal encoder features (9.0)
         audio_slice = np.array(out[0, 1:3, :])
-        assert np.allclose(audio_slice, 9.0, atol=1e-5), (
-            f"Audio positions not replaced: {audio_slice[:2]}"
-        )
+        assert np.allclose(audio_slice, 9.0, atol=1e-5), f"Audio positions not replaced: {audio_slice[:2]}"
 
     def test_text_positions_unchanged(self):
         """Non-audio positions should retain their text embeddings."""
@@ -123,6 +122,7 @@ class TestPrepareInputs:
 # ---------------------------------------------------------------------------
 # Sampling functions
 # ---------------------------------------------------------------------------
+
 
 class TestSampling:
     def test_greedy_returns_argmax(self):
@@ -172,9 +172,7 @@ class TestSampling:
     def test_repetition_penalty_reduces_recent_tokens(self):
         """Tokens in recent_tokens should have reduced logit."""
         logits = mx.array([[1.0] * 10])
-        penalised = _apply_repetition_penalty(
-            logits.reshape(-1), recent_tokens=[0, 1, 2], penalty=2.0
-        )
+        penalised = _apply_repetition_penalty(logits.reshape(-1), recent_tokens=[0, 1, 2], penalty=2.0)
         mx.eval(penalised)
         arr = np.array(penalised)
         # Tokens 0,1,2 had positive logit → divided by penalty
@@ -193,6 +191,7 @@ class TestSampling:
 # ---------------------------------------------------------------------------
 # Generation loop — unit tests with tiny model
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateLoop:
     def test_terminates_on_eos(self):
@@ -241,6 +240,7 @@ class TestGenerateLoop:
 # ---------------------------------------------------------------------------
 # End-to-end test with real weights
 # ---------------------------------------------------------------------------
+
 
 class TestGenerateRealWeights:
     @pytest.mark.skipif(

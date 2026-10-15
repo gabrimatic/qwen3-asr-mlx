@@ -103,15 +103,14 @@ def _get_mel_filterbank(
     """Return the mel filterbank, computing it once and caching."""
     key = (n_fft, n_mels, sample_rate, f_min, f_max)
     if key not in _mel_filterbank_cache:
-        _mel_filterbank_cache[key] = _build_mel_filterbank(
-            n_fft, n_mels, sample_rate, f_min, f_max
-        )
+        _mel_filterbank_cache[key] = _build_mel_filterbank(n_fft, n_mels, sample_rate, f_min, f_max)
     return _mel_filterbank_cache[key]
 
 
 # ---------------------------------------------------------------------------
 # Audio loading
 # ---------------------------------------------------------------------------
+
 
 def _read_wav_pcm(path: str | Path) -> tuple[np.ndarray, int]:
     """Fast path for plain PCM WAV files (PCM16, PCM32, float32).
@@ -224,6 +223,7 @@ def load_audio(path: str | Path, target_sr: int = SAMPLE_RATE) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # STFT + mel spectrogram
 # ---------------------------------------------------------------------------
+
 
 def _stft(
     waveform: np.ndarray,

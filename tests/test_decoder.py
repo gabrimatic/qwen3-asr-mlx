@@ -30,6 +30,7 @@ MODEL_PATH = Path(
 # Tiny config for fast unit tests
 # ---------------------------------------------------------------------------
 
+
 def _tiny_config() -> TextDecoderConfig:
     return TextDecoderConfig(
         hidden_size=64,
@@ -52,6 +53,7 @@ def _full_config() -> TextDecoderConfig:
 # RMSNorm behaviour
 # ---------------------------------------------------------------------------
 
+
 class TestRMSNorm:
     def test_output_shape_unchanged(self):
         norm = nn.RMSNorm(64, eps=1e-6)
@@ -69,7 +71,7 @@ class TestRMSNorm:
         out = norm(x)
         mx.eval(out)
         # RMS of output along last dim should be ≈ 1
-        rms = mx.sqrt(mx.mean(out ** 2, axis=-1))
+        rms = mx.sqrt(mx.mean(out**2, axis=-1))
         assert np.allclose(np.array(rms), 1.0, atol=1e-4)
 
     def test_output_matches_manual(self):
@@ -82,7 +84,7 @@ class TestRMSNorm:
         out = norm(x)
         mx.eval(out)
 
-        rms = np.sqrt((x_np ** 2).mean(axis=-1, keepdims=True) + 1e-6)
+        rms = np.sqrt((x_np**2).mean(axis=-1, keepdims=True) + 1e-6)
         expected = x_np / rms
         assert np.allclose(np.array(out), expected, atol=1e-4)
 
@@ -90,6 +92,7 @@ class TestRMSNorm:
 # ---------------------------------------------------------------------------
 # RoPE (via nn.RoPE)
 # ---------------------------------------------------------------------------
+
 
 class TestRoPE:
     def test_rope_preserves_shape(self):
@@ -151,6 +154,7 @@ class TestRoPE:
 # QK norm (Attention)
 # ---------------------------------------------------------------------------
 
+
 class TestQKNorm:
     def test_qk_norm_applied_per_head(self):
         """After q_norm, each head vector should have unit RMS (weight=1)."""
@@ -174,6 +178,7 @@ class TestQKNorm:
 # ---------------------------------------------------------------------------
 # GQA output shape
 # ---------------------------------------------------------------------------
+
 
 class TestGQA:
     def test_attention_output_shape(self):
@@ -202,6 +207,7 @@ class TestGQA:
 # ---------------------------------------------------------------------------
 # Full decoder forward pass
 # ---------------------------------------------------------------------------
+
 
 class TestDecoderForwardShape:
     def test_token_ids_input(self):
@@ -240,14 +246,13 @@ class TestDecoderForwardShape:
         manual_logits = h @ decoder.embed_tokens.weight.T
         mx.eval(manual_logits)
 
-        assert np.allclose(
-            np.array(logits), np.array(manual_logits), atol=1e-5
-        ), "lm_head is not tied to embed_tokens"
+        assert np.allclose(np.array(logits), np.array(manual_logits), atol=1e-5), "lm_head is not tied to embed_tokens"
 
 
 # ---------------------------------------------------------------------------
 # KV cache
 # ---------------------------------------------------------------------------
+
 
 class TestKVCache:
     def test_cache_grows_across_layers(self):
@@ -305,14 +310,13 @@ class TestKVCache:
         mx.eval(logits_cached)
         cached_logits = np.array(logits_cached[:, 0, :])
 
-        assert np.allclose(last_logits, cached_logits, atol=1e-3), (
-            "Cached decode does not match full-context decode"
-        )
+        assert np.allclose(last_logits, cached_logits, atol=1e-3), "Cached decode does not match full-context decode"
 
 
 # ---------------------------------------------------------------------------
 # Weight loading
 # ---------------------------------------------------------------------------
+
 
 class TestWeightLoading:
     @pytest.mark.skipif(
@@ -330,8 +334,8 @@ class TestWeightLoading:
         mx.eval(logits)
 
         assert logits.shape == (1, 3, config.vocab_size)
-        assert not mx.any(mx.isnan(logits)).item(),  "NaN in decoder output"
-        assert not mx.any(mx.isinf(logits)).item(),  "Inf in decoder output"
+        assert not mx.any(mx.isnan(logits)).item(), "NaN in decoder output"
+        assert not mx.any(mx.isinf(logits)).item(), "Inf in decoder output"
 
     @pytest.mark.skipif(
         not MODEL_PATH.is_dir(),

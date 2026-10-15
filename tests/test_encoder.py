@@ -25,6 +25,7 @@ MODEL_PATH = Path(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _random_mel(n_mels: int = 128, T: int = 100) -> mx.array:
     """Return a random mel spectrogram of shape (n_mels, T)."""
     return mx.array(np.random.randn(n_mels, T).astype(np.float32))
@@ -37,6 +38,7 @@ def _make_encoder() -> AudioEncoder:
 # ---------------------------------------------------------------------------
 # Conv stem shape
 # ---------------------------------------------------------------------------
+
 
 class TestConvStem:
     def test_single_chunk_stem_shape(self):
@@ -60,6 +62,7 @@ class TestConvStem:
 # ---------------------------------------------------------------------------
 # Full encoder forward shape
 # ---------------------------------------------------------------------------
+
 
 class TestEncoderForwardShape:
     def test_single_chunk_output_shape(self):
@@ -101,6 +104,7 @@ class TestEncoderForwardShape:
 # Weight loading
 # ---------------------------------------------------------------------------
 
+
 class TestWeightLoading:
     @pytest.mark.skipif(
         not MODEL_PATH.is_dir(),
@@ -122,6 +126,7 @@ class TestWeightLoading:
 # ---------------------------------------------------------------------------
 # Block attention mask
 # ---------------------------------------------------------------------------
+
 
 class TestBlockAttentionMask:
     def test_single_block_returns_none(self):
@@ -167,6 +172,7 @@ class TestBlockAttentionMask:
 # ---------------------------------------------------------------------------
 # Positional embeddings
 # ---------------------------------------------------------------------------
+
 
 class TestPositionalEmbeddings:
     def test_pe_shape(self):

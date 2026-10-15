@@ -43,11 +43,7 @@ class TestBuildPrompt:
         language = [220, 9707]
         ids = build_prompt(0, language, context)
         assert ids == (
-            _SYSTEM_PREFIX
-            + context
-            + _SYSTEM_SUFFIX
-            + _PROMPT_SUFFIX
-            + [11528, *language, ASR_TEXT_TOKEN_ID]
+            _SYSTEM_PREFIX + context + _SYSTEM_SUFFIX + _PROMPT_SUFFIX + [11528, *language, ASR_TEXT_TOKEN_ID]
         )
 
     def test_audio_tokens_present(self):
@@ -72,13 +68,13 @@ class TestBuildPrompt:
         """Verify the exact hardcoded prefix matches the Qwen3-ASR spec."""
         expected_prefix = [
             151644,  # <|im_start|>
-            8948,    # system
-            198,     # \n
+            8948,  # system
+            198,  # \n
             151645,  # <|im_end|>
-            198,     # \n
+            198,  # \n
             151644,  # <|im_start|>
-            872,     # user
-            198,     # \n
+            872,  # user
+            198,  # \n
             151669,  # <|audio_start|>
         ]
         assert expected_prefix == _PROMPT_PREFIX
@@ -88,10 +84,10 @@ class TestBuildPrompt:
         expected_suffix = [
             151670,  # <|audio_end|>
             151645,  # <|im_end|>
-            198,     # \n
+            198,  # \n
             151644,  # <|im_start|>
-            77091,   # assistant
-            198,     # \n
+            77091,  # assistant
+            198,  # \n
         ]
         assert expected_suffix == _PROMPT_SUFFIX
 
@@ -142,9 +138,7 @@ class TestParseOutput:
 
 class TestParseLanguageAndOutput:
     def test_extracts_language_and_text(self):
-        language, text = parse_language_and_output(
-            "language German<asr_text>Guten Morgen.<|im_end|>"
-        )
+        language, text = parse_language_and_output("language German<asr_text>Guten Morgen.<|im_end|>")
         assert language == "German"
         assert text == "Guten Morgen."
 

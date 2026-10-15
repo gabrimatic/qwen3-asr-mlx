@@ -33,6 +33,7 @@ def _tone(freq_hz: float = 440.0, duration_s: float = 1.0, sr: int = SAMPLE_RATE
 # Shape tests
 # ---------------------------------------------------------------------------
 
+
 class TestMelShape:
     def test_1s_silence_shape(self):
         audio = _silence(1.0)
@@ -68,6 +69,7 @@ class TestMelShape:
 # Value tests
 # ---------------------------------------------------------------------------
 
+
 class TestMelValues:
     def test_output_range(self):
         """After normalisation, values should cluster around [-1, 3] range."""
@@ -91,6 +93,7 @@ class TestMelValues:
 
     def test_mlx_array_type(self):
         import mlx.core as mx
+
         audio = _silence(0.5)
         mel = log_mel_spectrogram(audio)
         assert isinstance(mel, mx.array), f"Expected mx.array, got {type(mel)}"
@@ -99,6 +102,7 @@ class TestMelValues:
 # ---------------------------------------------------------------------------
 # Filterbank cache tests
 # ---------------------------------------------------------------------------
+
 
 class TestMelFilterbankCache:
     def test_cache_same_object(self):
@@ -118,9 +122,7 @@ class TestMelFilterbankCache:
 
     def test_filterbank_shape(self):
         fb = _get_mel_filterbank()
-        assert fb.shape == (N_MELS, N_FFT // 2 + 1), (
-            f"Filterbank shape mismatch: {fb.shape}"
-        )
+        assert fb.shape == (N_MELS, N_FFT // 2 + 1), f"Filterbank shape mismatch: {fb.shape}"
 
     def test_filterbank_non_negative(self):
         fb = _get_mel_filterbank()
@@ -130,6 +132,7 @@ class TestMelFilterbankCache:
 # ---------------------------------------------------------------------------
 # Reference parity (WhisperFeatureExtractor, used by Qwen3-ASR upstream)
 # ---------------------------------------------------------------------------
+
 
 class TestWhisperParity:
     def test_slaney_mel_scale(self):
