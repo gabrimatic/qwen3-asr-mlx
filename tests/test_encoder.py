@@ -5,21 +5,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
-import pytest
 
 from qwen3_asr_mlx.config import AudioEncoderConfig
 from qwen3_asr_mlx.encoder import AudioEncoder, SinusoidalPositionEmbedding, load_encoder_weights
 
-MODEL_PATH = Path(
-    "/Users/soroush/.cache/huggingface/hub"
-    "/models--mlx-community--Qwen3-ASR-1.7B-bf16"
-    "/snapshots/e1f6c266914abc5a46e8756e02580f834a6cf8a7"
-)
+from .model_weights import MODEL_PATH, requires_weights
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,10 +99,7 @@ class TestEncoderForwardShape:
 
 
 class TestWeightLoading:
-    @pytest.mark.skipif(
-        not MODEL_PATH.is_dir(),
-        reason="Cached model weights not available",
-    )
+    @requires_weights
     def test_load_and_forward(self):
         """Loading real weights should allow a forward pass without error."""
         encoder = _make_encoder()

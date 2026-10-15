@@ -5,12 +5,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
-import pytest
 
 from qwen3_asr_mlx.config import TextDecoderConfig
 from qwen3_asr_mlx.decoder import (
@@ -20,11 +17,7 @@ from qwen3_asr_mlx.decoder import (
     load_decoder_weights,
 )
 
-MODEL_PATH = Path(
-    "/Users/soroush/.cache/huggingface/hub"
-    "/models--mlx-community--Qwen3-ASR-1.7B-bf16"
-    "/snapshots/e1f6c266914abc5a46e8756e02580f834a6cf8a7"
-)
+from .model_weights import MODEL_PATH, requires_weights
 
 # ---------------------------------------------------------------------------
 # Tiny config for fast unit tests
@@ -319,10 +312,7 @@ class TestKVCache:
 
 
 class TestWeightLoading:
-    @pytest.mark.skipif(
-        not MODEL_PATH.is_dir(),
-        reason="Cached model weights not available",
-    )
+    @requires_weights
     def test_load_decoder_weights_and_forward(self):
         """Loading real weights should allow a forward pass without error."""
         config = _full_config()
@@ -337,10 +327,7 @@ class TestWeightLoading:
         assert not mx.any(mx.isnan(logits)).item(), "NaN in decoder output"
         assert not mx.any(mx.isinf(logits)).item(), "Inf in decoder output"
 
-    @pytest.mark.skipif(
-        not MODEL_PATH.is_dir(),
-        reason="Cached model weights not available",
-    )
+    @requires_weights
     def test_embed_tokens_weight_shape(self):
         """embed_tokens weight should be (vocab_size, hidden_size)."""
         config = _full_config()

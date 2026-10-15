@@ -17,15 +17,7 @@ from qwen3_asr_mlx.model import (
     _find_split_points,
 )
 
-# ---------------------------------------------------------------------------
-# Cached model path
-# ---------------------------------------------------------------------------
-
-MODEL_PATH = Path(
-    "/Users/soroush/.cache/huggingface/hub"
-    "/models--mlx-community--Qwen3-ASR-1.7B-bf16"
-    "/snapshots/e1f6c266914abc5a46e8756e02580f834a6cf8a7"
-)
+from .model_weights import MODEL_PATH, requires_weights
 
 
 def _silence(duration_s: float = 0.5, sr: int = 16_000) -> np.ndarray:
@@ -133,14 +125,14 @@ class TestFindSplitPoints:
 @pytest.fixture(scope="module")
 def real_model():
     """The full model, loaded once per module for the slow tests."""
+    if MODEL_PATH is None:
+        pytest.skip("Cached model weights not available")
     return Qwen3ASR.from_pretrained(MODEL_PATH)
 
 
 @pytest.fixture(scope="module")
 def tokenizer_only_model():
     """A Qwen3ASR stub carrying only the real tokenizer files (no weights)."""
-    from pathlib import Path
-
     from huggingface_hub import snapshot_download
 
     from qwen3_asr_mlx.tokenizer import Tokenizer
@@ -332,6 +324,7 @@ class TestWarmUp:
 
 
 @pytest.mark.slow
+@requires_weights
 class TestContextManager:
     def test_context_manager_closes(self):
         with Qwen3ASR.from_pretrained(MODEL_PATH) as model:

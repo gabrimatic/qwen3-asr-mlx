@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import mlx.core as mx
 import numpy as np
 import pytest
@@ -27,11 +25,7 @@ from qwen3_asr_mlx.tokenizer import (
     build_prompt,
 )
 
-MODEL_PATH = Path(
-    "/Users/soroush/.cache/huggingface/hub"
-    "/models--mlx-community--Qwen3-ASR-1.7B-bf16"
-    "/snapshots/e1f6c266914abc5a46e8756e02580f834a6cf8a7"
-)
+from .model_weights import MODEL_PATH, requires_weights
 
 
 def _tiny_decoder_config() -> TextDecoderConfig:
@@ -243,10 +237,7 @@ class TestGenerateLoop:
 
 
 class TestGenerateRealWeights:
-    @pytest.mark.skipif(
-        not MODEL_PATH.is_dir(),
-        reason="Cached model weights not available",
-    )
+    @requires_weights
     def test_encode_silence_and_generate(self):
         """Load both encoder and decoder, encode silence, generate tokens.
 
