@@ -1,10 +1,11 @@
 # qwen3-asr-mlx
 
 [![PyPI](https://img.shields.io/pypi/v/qwen3-asr-mlx.svg)](https://pypi.org/project/qwen3-asr-mlx/)
+[![CI](https://github.com/gabrimatic/qwen3-asr-mlx/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrimatic/qwen3-asr-mlx/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
-[![Python 3.10–3.13](https://img.shields.io/badge/Python-3.10--3.13-blue.svg)]()
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)]()
 
 Qwen3-ASR speech-to-text inference on Apple Silicon via MLX.
 
@@ -17,7 +18,7 @@ An MLX implementation of the [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)
 
 ## Quick Start
 
-**Apple Silicon required.** Python 3.10–3.13, MLX 0.31+.
+**Apple Silicon required.** macOS 14+, Python 3.10+, MLX 0.31+.
 
 ```bash
 pip install qwen3-asr-mlx
@@ -49,6 +50,7 @@ default. For lower memory use and latency, load
 - **On-device** via MLX. No server, no network during inference.
 - **No PyTorch or transformers** dependency.
 - **Audio formats** via soundfile (WAV, FLAC, MP3, etc.)
+- **Reference-exact features**: the log-mel frontend matches the Whisper feature extractor Qwen3-ASR was trained with.
 - **Automatic language detection** from model output.
 - **Context and hotwords** through Qwen3-ASR's official system-prompt format.
 - **Greedy and sampling-based decoding** with repetition penalty, top-k, and nucleus sampling.
@@ -134,8 +136,8 @@ TranscriptionResult { text, language, duration }
 ## Requirements
 
 - Apple Silicon Mac (M1 or later)
-- macOS 13+
-- Python 3.10–3.13
+- macOS 14+ (the oldest macOS MLX ships wheels for)
+- Python 3.10+
 - MLX 0.31+
 
 The MLX conversion and this runtime are community maintained; they are not
@@ -152,7 +154,9 @@ git clone https://github.com/gabrimatic/qwen3-asr-mlx.git
 cd qwen3-asr-mlx
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-python -m pytest tests/ -v
+python -m pytest -v
+ruff check src tests && ruff format --check src tests
+mypy
 ```
 
 Skip model-loading tests with `-m "not slow"`.

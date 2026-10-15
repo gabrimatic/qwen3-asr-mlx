@@ -12,10 +12,13 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Run the test suite:
+Run the test suite and the checks CI enforces:
 
 ```bash
 python -m pytest tests/ -v
+ruff check src tests
+ruff format --check src tests
+mypy
 ```
 
 Tests that load the full model weights are marked `slow`. To skip them:
@@ -52,9 +55,9 @@ The `slow` marker covers tests that load the full 1.7B model. Fast tests cover u
 ## PR Checklist
 
 - One feature or fix per PR. Keep scope tight.
-- All tests pass before opening.
+- Tests, `ruff check`, `ruff format --check` and `mypy` pass before opening.
 - Update `README.md` if user-facing behavior changes.
-- Match existing code style. No reformatting unrelated files.
+- Code style is `ruff format`. No unrelated changes.
 - No PyTorch or transformers dependencies.
 
 ## Reporting Issues
