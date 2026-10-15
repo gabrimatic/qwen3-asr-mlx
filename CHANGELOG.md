@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-10-15
+
+### Fixed
+
+- Match the reference Whisper log-mel frontend that Qwen3-ASR is trained on:
+  Slaney mel scale, Slaney `2 / width` filter normalisation and a periodic
+  Hann window. Features previously drifted from the reference by a mean
+  absolute error of 0.21; they now match within 3e-6.
+- Honour RIFF chunk padding and validate every header field in the native
+  WAV reader before use.
+
+### Changed
+
+- Support Python 3.14 and 3.15; the upper Python bound is removed.
+- Document macOS 14 as the minimum, the oldest macOS MLX publishes wheels for.
+- Compatible with `huggingface-hub` 2.x.
+- The package version is read from `qwen3_asr_mlx.__version__`.
+
+### Removed
+
+- The unused `audio` extra (`sounddevice`); nothing in the package imported it.
+
 ## [0.2.0] - 2026-07-24
 
 ### Added
