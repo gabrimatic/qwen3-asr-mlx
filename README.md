@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/qwen3-asr-mlx.svg)](https://pypi.org/project/qwen3-asr-mlx/)
 [![CI](https://github.com/gabrimatic/qwen3-asr-mlx/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrimatic/qwen3-asr-mlx/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/gabrimatic/qwen3-asr-mlx/blob/main/LICENSE)
 [![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-required-blue.svg)]()
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)]()
@@ -55,7 +55,7 @@ default. For lower memory use and latency, load
 - **Context and hotwords** through Qwen3-ASR's official system-prompt format.
 - **Greedy and sampling-based decoding** with repetition penalty, top-k, and nucleus sampling.
 - **Thread-safe** with internal lock for concurrent callers.
-- **Long audio support** with automatic chunking at low-energy boundaries (up to 20 minutes).
+- **Long audio support** with automatic chunking at low-energy boundaries (20-minute chunks by default).
 - **Context manager** for resource cleanup.
 
 ---
@@ -86,6 +86,7 @@ Transcribe audio to text.
 | `top_k` | `int` | `0` | Top-k cutoff (`0` = disabled) |
 | `repetition_penalty` | `float` | `1.2` | Penalty for repeated tokens |
 | `max_tokens` | `int` or `None` | `None` | Max output tokens; auto-computed from duration when `None` |
+| `repetition_context_size` | `int` | `100` | Number of recent tokens the repetition penalty looks back over |
 | `chunk_duration` | `float` | `1200.0` | Max seconds per chunk; longer audio is split automatically |
 
 ### `model.warm_up()`
@@ -205,9 +206,9 @@ This project depends on:
 
 ## License
 
-This inference code is released under the MIT License. See [LICENSE](LICENSE) for details.
+This inference code is released under the MIT License. See [LICENSE](https://github.com/gabrimatic/qwen3-asr-mlx/blob/main/LICENSE) for details.
 
-The model weights have their own license (Apache 2.0). See [Model License](#legal-notices) above.
+The model weights have their own license (Apache 2.0). See [Model License](#model-license) above.
 
 ---
 

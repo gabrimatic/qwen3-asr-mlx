@@ -46,4 +46,5 @@ These are not considered vulnerabilities:
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | Yes       |
+| 0.3.x   | Yes       |
+| < 0.3   | No        |

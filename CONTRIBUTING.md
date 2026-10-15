@@ -52,6 +52,8 @@ python -m pytest tests/test_model.py -v      # specific module
 
 The `slow` marker covers tests that load the full 1.7B model. Fast tests cover unit-level logic (mel computation, tokenizer, config parsing, sampling, chunking).
 
+Weight-loading tests use `mlx-community/Qwen3-ASR-1.7B-bf16` from the local HuggingFace cache, or the directory in `QWEN3_ASR_MODEL_PATH`, and skip when neither holds `model.safetensors`. They never download the weights.
+
 ## PR Checklist
 
 - One feature or fix per PR. Keep scope tight.
