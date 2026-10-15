@@ -130,26 +130,38 @@ class TestFindSplitPoints:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def real_model():
+    """The full model, loaded once per module for the slow tests."""
+    return Qwen3ASR.from_pretrained(MODEL_PATH)
+
+
+@pytest.fixture(scope="module")
+def tokenizer_only_model():
+    """A Qwen3ASR stub carrying only the real tokenizer files (no weights)."""
+    from pathlib import Path
+
+    from huggingface_hub import snapshot_download
+
+    from qwen3_asr_mlx.tokenizer import Tokenizer
+
+    m = object.__new__(Qwen3ASR)
+    path = Path(
+        snapshot_download(
+            "mlx-community/Qwen3-ASR-1.7B-bf16",
+            allow_patterns=["vocab.json", "merges.txt", "tokenizer_config.json"],
+        )
+    )
+    m._tokenizer = Tokenizer(path)
+    return m
+
+
 class TestDecodeOutput:
     """Tests for the internal _decode_output method via a minimal stub."""
 
-    @pytest.fixture(scope="class")
-    def model(self):
-        from pathlib import Path
-
-        from huggingface_hub import snapshot_download
-
-        from qwen3_asr_mlx.tokenizer import Tokenizer
-
-        m = object.__new__(Qwen3ASR)
-        path = Path(
-            snapshot_download(
-                "mlx-community/Qwen3-ASR-1.7B-bf16",
-                allow_patterns=["vocab.json", "merges.txt", "tokenizer_config.json"],
-            )
-        )
-        m._tokenizer = Tokenizer(path)
-        return m
+    @pytest.fixture
+    def model(self, tokenizer_only_model):
+        return tokenizer_only_model
 
     def test_decodes_transcription(self, model):
         # "Hello." + <|im_end|>
@@ -246,9 +258,9 @@ class TestContextPrompt:
 
 @pytest.mark.slow
 class TestFromPretrained:
-    @pytest.fixture(scope="class")
-    def model(self):
-        return Qwen3ASR.from_pretrained(MODEL_PATH)
+    @pytest.fixture
+    def model(self, real_model):
+        return real_model
 
     def test_loads_without_error(self, model):
         assert isinstance(model, Qwen3ASR)
@@ -265,9 +277,9 @@ class TestFromPretrained:
 
 @pytest.mark.slow
 class TestTranscribe:
-    @pytest.fixture(scope="class")
-    def model(self):
-        return Qwen3ASR.from_pretrained(MODEL_PATH)
+    @pytest.fixture
+    def model(self, real_model):
+        return real_model
 
     def test_transcribe_silence_returns_result(self, model):
         result = model.transcribe(_silence(0.5))
@@ -311,9 +323,9 @@ class TestTranscribe:
 
 @pytest.mark.slow
 class TestWarmUp:
-    @pytest.fixture(scope="class")
-    def model(self):
-        return Qwen3ASR.from_pretrained(MODEL_PATH)
+    @pytest.fixture
+    def model(self, real_model):
+        return real_model
 
     def test_warm_up_runs(self, model):
         model.warm_up()  # should not raise
