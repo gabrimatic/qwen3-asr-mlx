@@ -12,7 +12,9 @@ from qwen3_asr_mlx.audio import (
     N_MELS,
     SAMPLE_RATE,
     _get_mel_filterbank,
+    _hz_to_mel,
     _mel_filterbank_cache,
+    _mel_to_hz,
     log_mel_spectrogram,
 )
 
@@ -124,3 +126,32 @@ class TestMelFilterbankCache:
     def test_filterbank_non_negative(self):
         fb = _get_mel_filterbank()
         assert (fb >= 0).all(), "Filterbank weights should be non-negative"
+
+
+# ---------------------------------------------------------------------------
+# Reference parity (WhisperFeatureExtractor, used by Qwen3-ASR upstream)
+# ---------------------------------------------------------------------------
+
+class TestWhisperParity:
+    def test_slaney_mel_scale(self):
+        """Mel scale is Slaney: linear below 1 kHz, logarithmic above."""
+        assert np.isclose(_hz_to_mel(1000.0), 15.0)
+        assert np.isclose(_hz_to_mel(500.0), 7.5)
+        hz = np.array([0.0, 250.0, 1000.0, 4000.0, 8000.0])
+        assert np.allclose(_mel_to_hz(_hz_to_mel(hz)), hz)
+
+    @pytest.mark.parametrize(
+        ("row", "peak", "argmax", "total"),
+        [
+            (0, 0.012373986332636965, 1, 0.012373986332636965),
+            (1, 0.03039256487135522, 1, 0.03039256487135522),
+            (64, 0.01809151762107613, 43, 0.024841200325741553),
+            (127, 0.005041601675024642, 195, 0.02493604388376728),
+        ],
+    )
+    def test_filterbank_matches_reference(self, row, peak, argmax, total):
+        """Filterbank rows match the reference Slaney-normalised filters."""
+        fb = _get_mel_filterbank()
+        assert np.isclose(fb[row].max(), peak, rtol=1e-5)
+        assert int(fb[row].argmax()) == argmax
+        assert np.isclose(fb[row].sum(), total, rtol=1e-5)

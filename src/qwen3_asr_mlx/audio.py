@@ -28,14 +28,27 @@ _mel_filterbank_cache: dict[tuple, np.ndarray] = {}
 # Mel filterbank (Slaney-style, same as librosa default)
 # ---------------------------------------------------------------------------
 
-def _hz_to_mel(freq: float | np.ndarray) -> float | np.ndarray:
-    """Convert Hz to mel using Slaney formula."""
-    return 2595.0 * np.log10(1.0 + freq / 700.0)
+# Slaney mel scale constants (librosa ``htk=False``, Whisper feature extractor)
+_F_SP = 200.0 / 3.0
+_MIN_LOG_HZ = 1000.0
+_MIN_LOG_MEL = _MIN_LOG_HZ / _F_SP
+_LOG_STEP = np.log(6.4) / 27.0
 
 
-def _mel_to_hz(mel: float | np.ndarray) -> float | np.ndarray:
-    """Convert mel to Hz using Slaney formula."""
-    return 700.0 * (10.0 ** (mel / 2595.0) - 1.0)
+def _hz_to_mel(freq: float | np.ndarray) -> np.ndarray:
+    """Convert Hz to mel on the Slaney scale (linear below 1 kHz, log above)."""
+    freq = np.asarray(freq, dtype=np.float64)
+    linear = freq / _F_SP
+    log = _MIN_LOG_MEL + np.log(np.maximum(freq, _MIN_LOG_HZ) / _MIN_LOG_HZ) / _LOG_STEP
+    return np.where(freq >= _MIN_LOG_HZ, log, linear)
+
+
+def _mel_to_hz(mel: float | np.ndarray) -> np.ndarray:
+    """Convert Slaney-scale mel back to Hz."""
+    mel = np.asarray(mel, dtype=np.float64)
+    linear = mel * _F_SP
+    log = _MIN_LOG_HZ * np.exp(_LOG_STEP * (np.maximum(mel, _MIN_LOG_MEL) - _MIN_LOG_MEL))
+    return np.where(mel >= _MIN_LOG_MEL, log, linear)
 
 
 def _build_mel_filterbank(
@@ -72,10 +85,10 @@ def _build_mel_filterbank(
 
         filters[i] = np.maximum(0.0, np.minimum(up_slope, down_slope))
 
-        # Slaney area normalisation: divide by filter width in Hz
+        # Slaney area normalisation: 2 / filter width in Hz
         width = f_right - f_left
         if width > 0.0:
-            filters[i] /= width
+            filters[i] *= 2.0 / width
 
     return filters
 
@@ -216,10 +229,10 @@ def _stft(
     """Compute the STFT using numpy.
 
     Returns complex array of shape (n_fft // 2 + 1, n_frames).
-    Uses a Hann window.  Pads the signal symmetrically so that the first
+    Uses a periodic Hann window (as ``torch.hann_window``).  Pads the signal symmetrically so that the first
     frame is centred on sample 0 (librosa-style centre=True).
     """
-    window = np.hanning(n_fft).astype(np.float32)
+    window = np.hanning(n_fft + 1)[:-1].astype(np.float32)
     pad = n_fft // 2
     waveform = np.pad(waveform, pad, mode="reflect")
 
